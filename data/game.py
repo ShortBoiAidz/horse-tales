@@ -1,3 +1,10 @@
+# importing modules
+import modules.player as player
+import modules.characters as characters
+import modules.objects as objects
+import modules.sounds as sounds
+
+# importing pygame shit
 import pygame as pg
 import sys
 import os
@@ -5,52 +12,13 @@ import os
 WIDTH, HEIGHT = 800, 600
 GAME_NAME = "Horse Tale"
 
-class Player:
-	def __init__(self):
-		self.x = 0
-		self.y = 0
-
-class Prank:
-	def __init__(self):
-		self.x = 0
-		self.y = 0
-
-class Rooster:
-	def __init__(self):
-		self.x = 0
-		self.y = 0
-
-class BlueCoin:
-	def __init__(self):
-		self.x = 0
-		self.y = 0
-
-class YellowCoin:
-	def __init__(self):
-		self.x = 0
-		self.y = 0
-
-class RedCoin:
-	def __init__(self):
-		self.x = 0
-		self.y = 0
-
-class Smirk:
-	def __init__(self):
-		self.x = 0
-		self.y = 0
-
-def init_assets():
-	# Load images, sounds, etc.
-	pass
-
 def process_logic():
-	# Update game state, handle collisions, etc.
 	pass
 
 def draw_game():
-	# Draw all game elements
-	pass
+	player.Player.draw(screen) # "missing required positional argument for screen" apparently
+
+	pg.display.flip()
 
 def handle_input():
 	for event in pg.event.get():
@@ -58,7 +26,7 @@ def handle_input():
 			pg.quit()
 			sys.exit()
 
-def init_pygame(): # Initialise
+def init_pygame():
 	pg.init()
 	pg.mixer.init()
 	pg.display.set_caption(GAME_NAME)
@@ -66,16 +34,16 @@ def init_pygame(): # Initialise
 
 	return screen
 
-screen = init_pygame()
+screen = init_pygame(), sounds.init_assets()
 
-while True: # Running loop
+while True:
 	keys = pg.key.get_pressed()
 
 	process_logic()
 	draw_game()
 	handle_input()
 
-	for event in pg.event.get(): # Quit function
+	for event in pg.event.get():
 		if event.type == pg.QUIT:
 			pg.quit()
 			sys.exit()

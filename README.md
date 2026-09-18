@@ -82,7 +82,7 @@ Smirk shows lots of passion and professionalism in her career of news reporting,
 ### Daniel Prank
 
 **Backstory:**<br>
-Daniel Prank grew up in an upper-class environment, but loved to pose as someone living in the lower-class. His parents were always very harsh on him with anything he did, and were especially demeaning when it came to Prank expressing his interests: that being a game show host 
+Daniel Prank grew up in an upper-class environment, but loved to pose as someone living in the lower-class. His parents were always very harsh on him with anything he did, and were especially demeaning when it came to Prank expressing his interests: that being a game show host
 (he was heavily inspired by his favourite character Tenna from Deltarune). Once he moved away from his parents, he continued his posing as the lower-class by fasely assuming that they don't own any pants—hence why he never wears pants.
 
 <br>**Personality:**<br>
