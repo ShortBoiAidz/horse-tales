@@ -1,5 +1,5 @@
 # Horse Tales — DEBUG
-## ⚠️THIS BRANCH IS PURELY FOR CODE THAT **DOES NOT** WORK. DO NOT FORK THIS BRANCH⚠️
+## ⚠️THIS BRANCH IS PURELY FOR CODE THAT **_DOES NOT_** WORK. DO NOT FORK THIS BRANCH⚠️
 
 ## Table of Contents
 - <a href="#storyline">Storyline
