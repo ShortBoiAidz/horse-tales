@@ -2,6 +2,7 @@
 ## 🚧WORK IN PROGRESS🚧
 
 ## Table of Contents
+- <a href="#storyline">Storyline
 - <a href="#characters">Characters
 
 ## Storyline
