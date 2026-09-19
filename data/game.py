@@ -1,24 +1,27 @@
 # importing modules
-import modules.player as player
-import modules.characters as characters
-import modules.objects as objects
-import modules.sounds as sounds
+from modules import player, characters, objects, sounds, maps, enemies, cutscenes
 
 # importing pygame shit
 import pygame as pg
 import sys
-import os
 
 WIDTH, HEIGHT = 800, 600
 GAME_NAME = "Horse Tale"
 
-def process_logic():
-	pass
+def init_pygame():
+	global carleigheSmirk, danielPrank
 
-def draw_game():
-	player.Player.draw(screen) # "missing required positional argument for screen" apparently
+	screen = pg.display.set_mode((WIDTH, HEIGHT))
 
-	pg.display.flip()
+	carleigheSmirk = characters.Smirk()
+	danielPrank = characters.Prank()
+
+	pg.init()
+	pg.display.set_caption(GAME_NAME)
+
+	carleigheSmirk.draw(screen)
+
+	return screen
 
 def handle_input():
 	for event in pg.event.get():
@@ -26,18 +29,21 @@ def handle_input():
 			pg.quit()
 			sys.exit()
 
-def init_pygame():
-	pg.init()
-	pg.mixer.init()
-	pg.display.set_caption(GAME_NAME)
-	screen = pg.display.set_mode((WIDTH, HEIGHT))
+		if event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
+			carleigheSmirk.draw_shot(screen)
+		if event.type == pg.KEYDOWN and event.key == pg.K_g:
+			danielPrank.draw(screen)
 
-	return screen
+def process_logic():
+	pass
 
-screen = init_pygame(), sounds.init_assets()
+def draw_game():
+	pg.display.flip()
+
+screen = init_pygame()
 
 while True:
-	keys = pg.key.get_pressed()
+	#keys = pg.key.get_pressed()
 
 	process_logic()
 	draw_game()

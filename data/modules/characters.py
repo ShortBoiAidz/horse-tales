@@ -1,10 +1,16 @@
 import pygame as pg
+import modules.sounds as sounds
 
 class Prank:
 	def __init__(self):
-		self.image = pg.image.load("assets\textures\characters\daniel_prank\idle.png")
-		self.x = 0
-		self.y = 0
+		self.image = pg.image.load("assets/textures/characters/daniel_prank/idle.png")
+		self.x = 800 // 2
+		self.y = 600 // 2
+
+	def draw(self, screen):
+		screen.blit(self.image, (self.x, self.y))
+		sounds.stopSounds()
+		sounds.danielPrankSound()
 
 class Rooster:
 	def __init__(self):
@@ -14,7 +20,16 @@ class Rooster:
 
 class Smirk:
 	def __init__(self):
-		self.image = pg.image.load("assets\textures\characters\carleighe_smirk\idle.png")
-		self.image_shot = pg.image.load("assets\textures\characters\carleighe_smirk\shot.png")
+		self.image = pg.image.load("assets/textures/characters/carleighe_smirk/idle.png")
+		self.image_shot = pg.image.load("assets/textures/characters/carleighe_smirk/shot.png")
 		self.x = 0
 		self.y = 0
+
+	def draw(self, screen):
+		screen.blit(self.image, (self.x, self.y))
+
+	def draw_shot(self, screen):
+		sounds.smirkShotSound()
+		screen.blit(self.image_shot, (self.x, self.y))
+		pg.time.delay(1000)
+		sounds.sadSound()
