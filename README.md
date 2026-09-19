@@ -1,7 +1,4 @@
-# Horse Tales — DEBUG
-## ⚠️This branch is purely for code that **_DOES NOT_** work. _DO NOT_ fork this branch⚠️
-
-## ABSOLUTELY <ins>DO NOT _EVER_</ins> MERGE THIS BRANCH WITH <code>main</code>
+# Horse Tales
 
 ## Table of Contents
 - <a href="#storyline">Storyline
