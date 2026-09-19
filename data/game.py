@@ -9,12 +9,19 @@ WIDTH, HEIGHT = 800, 600
 GAME_NAME = "Horse Tale"
 
 def init_pygame():
+	global carleigheSmirk, danielPrank
+
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
+
+	carleigheSmirk = characters.Smirk()
+	danielPrank = characters.Prank()
 
 	pg.init()
 	pg.display.set_caption(GAME_NAME)
 
-	characters.Smirk.draw(screen)
+	carleigheSmirk.draw(screen)
+
+	return screen
 
 def handle_input():
 	for event in pg.event.get():
@@ -22,8 +29,10 @@ def handle_input():
 			pg.quit()
 			sys.exit()
 
-		if event.type == pg.KEYDOWN and pg.K_ESCAPE:
-			characters.Smirk.draw_shot(screen)
+		if event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
+			carleigheSmirk.draw_shot(screen)
+		if event.type == pg.KEYDOWN and event.key == pg.K_g:
+			danielPrank.draw(screen)
 
 def process_logic():
 	pass
