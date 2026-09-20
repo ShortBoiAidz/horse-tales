@@ -8,23 +8,28 @@ import sys
 
 WIDTH, HEIGHT = 800, 600
 GAME_NAME = "Horse Tale"
+DEBUG = True
 
 def init_pygame():
-	global clock, carleigheSmirk, danielPrank, playerObject
+	global clock, carleigheSmirk, danielPrank, playerObject, currentMap, keys
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
-
 	clock = pg.time.Clock()
 
+	# Character objects
 	carleigheSmirk = characters.Smirk()
 	danielPrank = characters.Prank()
-	playerObject = player.Player("assets/textures/characters/player/idle.png")
+	playerObject = player.Player()
+
+	# Other objects
+	currentMap = mapstates.currentMap()
+
+	# Sprite groups
+	movingSprites = pg.sprite.Group()
+	movingSprites.add(playerObject)
 
 	pg.init()
 	pg.display.set_caption(GAME_NAME)
-
-	carleigheSmirk.draw(screen)
-	playerObject.draw(screen)
 
 	return screen, clock
 
@@ -34,17 +39,13 @@ def handle_input():
 			pg.quit()
 			sys.exit()
 
-		if event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
-			carleigheSmirk.draw_shot(screen)
-		elif event.type == pg.KEYDOWN and event.key == pg.K_g:
-			danielPrank.draw(screen)
-		elif event.type == pg.KEYDOWN and event.key == pg.K_1:
-			characters.Smirk.dialog(screen)
-
 def process_logic():
-	playerObject.update()
+	playerObject.update(keys)
 
 def draw_game():
+	currentMap.drawMap(screen)
+	playerObject.draw(screen)
+
 	pg.display.flip()
 
 screen, clock = init_pygame()
@@ -60,3 +61,8 @@ while True:
 		if event.type == pg.QUIT:
 			pg.quit()
 			sys.exit()
+
+	if DEBUG:
+		print(f"Player coords: {playerObject.x, playerObject.y}")
+
+	clock.tick(10)
