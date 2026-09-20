@@ -88,3 +88,5 @@ Daniel Prank grew up in an upper-class environment, but loved to pose as someone
 <br>**Personality:**<br>
 Daniel Prank is very passionate about his game shows and minigames that he hosts. He has extremely long, boring dialog that seems to never end, but despite his lack of social intelligence, he still tries his hardest to help those in need (although he mostly uses this as an excuse
 to get people to play his games).
+
+[//]: github link: https://github.com/ShortBoiAidz/horse-tales
