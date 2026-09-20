@@ -1,5 +1,6 @@
 # importing modules
-from modules import player, characters, objects, sounds, maps, enemies, cutscenes
+from data.states import cutscenes, mapstates
+from data.components import sounds, player, characters, objects, enemies
 
 # importing pygame shit
 import pygame as pg
@@ -31,8 +32,10 @@ def handle_input():
 
 		if event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
 			carleigheSmirk.draw_shot(screen)
-		if event.type == pg.KEYDOWN and event.key == pg.K_g:
+		elif event.type == pg.KEYDOWN and event.key == pg.K_g:
 			danielPrank.draw(screen)
+		elif event.type == pg.KEYDOWN and event.key == pg.K_1:
+			characters.Smirk.dialog()
 
 def process_logic():
 	pass

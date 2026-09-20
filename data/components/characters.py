@@ -1,5 +1,5 @@
 import pygame as pg
-import modules.sounds as sounds
+import sounds
 
 class Prank:
 	def __init__(self):
