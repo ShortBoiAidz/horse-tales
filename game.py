@@ -35,7 +35,7 @@ def handle_input():
 		elif event.type == pg.KEYDOWN and event.key == pg.K_g:
 			danielPrank.draw(screen)
 		elif event.type == pg.KEYDOWN and event.key == pg.K_1:
-			characters.Smirk.dialog()
+			characters.Smirk.dialog(screen)
 
 def process_logic():
 	pass
