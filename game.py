@@ -10,17 +10,19 @@ WIDTH, HEIGHT = 800, 600
 GAME_NAME = "Horse Tale"
 
 def init_pygame():
-	global carleigheSmirk, danielPrank
+	global carleigheSmirk, danielPrank, playerObject
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
 
 	carleigheSmirk = characters.Smirk()
 	danielPrank = characters.Prank()
+	playerObject = player.Player("assets/textures/characters/player/idle.png")
 
 	pg.init()
 	pg.display.set_caption(GAME_NAME)
 
 	carleigheSmirk.draw(screen)
+	playerObject.draw(screen)
 
 	return screen
 
@@ -38,7 +40,7 @@ def handle_input():
 			characters.Smirk.dialog()
 
 def process_logic():
-	pass
+	playerObject.update()
 
 def draw_game():
 	pg.display.flip()

@@ -7,8 +7,10 @@ class Player:
 		self.image = pg.image.load(image)
 		self.rect = self.image.get_rect(center=(self.x, self.y))
 
-	def move(self, dx, dy):
-		pass
+	def update(self):
+		for event in pg.event.get():
+			if event.type == pg.KEYDOWN and event.type == pg.K_LEFT:
+				self.image = pg.image.load("assets/textures/characters/player/walk1.png") # This doesnt really work
 
 	def draw(self, screen):
 		screen.blit(self.image, self.rect.topleft)
