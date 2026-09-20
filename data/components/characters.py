@@ -1,5 +1,5 @@
 import pygame as pg
-import sys
+
 from data.components import sounds
 
 import random
