@@ -1,4 +1,5 @@
 import pygame as pg
+import sys
 from data.components import sounds
 
 import random
@@ -6,8 +7,8 @@ import random
 class Prank:
   def __init__(self):
     self.image = pg.image.load("assets/textures/characters/daniel_prank/idle.png")
-    self.x = 800 // 2
-    self.y = 600 // 2
+    self.x = 700 // 2
+    self.y = 500 // 2
 
   def draw(self, screen):
     screen.blit(self.image, (self.x, self.y))
@@ -16,7 +17,7 @@ class Prank:
 
 class Rooster:
   def __init__(self):
-    self.image = pg.image.load("assets\textures\characters\riley_rooster\idle.png")
+    self.image = pg.image.load("assets/textures/characters/riley_rooster/idle.png")
     self.x = 0
     self.y = 0
 
@@ -24,10 +25,12 @@ class Smirk:
   def __init__(self):
     self.image = pg.image.load("assets/textures/characters/carleighe_smirk/idle.png")
     self.image_shot = pg.image.load("assets/textures/characters/carleighe_smirk/shot.png")
-    self.x = 0
-    self.y = 0
+    self.x = 700 // 2
+    self.y = 500 // 2
 
   def draw(self, screen):
+    sounds.stopSounds()
+    sounds.newsSound()
     screen.blit(self.image, (self.x, self.y))
 
   def draw_shot(self, screen):
@@ -37,7 +40,11 @@ class Smirk:
     pg.time.delay(1000)
     sounds.sadSound()
 
-  def dialog():
+  def dialog(screen):
+    font = pg.font.SysFont("Comic Sans MS", 20)
+    text_y = 530
+    text_x = 500
+
     voicelines = [
       "Last night, there was a fire in the Bronx last night that killed people during the fire last night in the Bronx. They say they died due to the fire being too hot for their bodies. Bummer.",
       "An unknown killer is loose in the town. For your own safety, stay inside and do not trust anyone.",
@@ -45,4 +52,9 @@ class Smirk:
       "This is unrelated to any events, but I talked to my good friend Bart about his views on pineapples. He believes they aren't real. What an idiot.",
       "Funny how pineapples are so unrelated to coffee."
     ]
-    print(voicelines[random.randint(0, 5)])
+
+    newsLabel = font.render(voicelines[random.randint(0, 4)], True, (255, 0, 0))
+
+    pg.draw.rect(screen, (255, 255, 255), (0, 500, 800, 100))
+
+    screen.blit(newsLabel, (text_x, text_y))
