@@ -46,7 +46,7 @@ def draw_game():
 screen = init_pygame()
 
 while True:
-	#keys = pg.key.get_pressed()
+	keys = pg.key.get_pressed()
 
 	process_logic()
 	draw_game()
