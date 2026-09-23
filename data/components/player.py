@@ -15,6 +15,7 @@ class Player(pg.sprite.Sprite):
 
     self.sprites_right.append(pg.image.load("assets/textures/characters/player/walk1_right.png"))
     self.sprites_right.append(pg.image.load("assets/textures/characters/player/walk2_right.png"))
+    #self.sprites_right.append(pg.image.load("assets/textures/characters/player/appa.png"))
 
     # Assigning images to sprites
     self.current_sprite = 0
