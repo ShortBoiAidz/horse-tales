@@ -35,7 +35,8 @@ class caveEntranceMap:
     self.rect = self.img.get_rect()
 
   def drawMap(self, screen):
-    pass
+    screen.blit(self.img, self.rect.topleft)
+    pg.draw.rect(screen, (0), self.entranceRect)
 
   def update(self):
     if self.entranceRect.colliderect(playerObject.rect):
