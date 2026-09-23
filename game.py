@@ -11,7 +11,7 @@ GAME_NAME = "Horse Tale"
 DEBUG = True
 
 def init_pygame():
-	global clock, carleigheSmirk, danielPrank, playerObject, currentMap, keys
+	global clock, carleigheSmirk, danielPrank, playerObject, currentMap, keys, caveEntranceMap
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
 	clock = pg.time.Clock()
@@ -23,6 +23,7 @@ def init_pygame():
 
 	# Other objects
 	currentMap = mapstates.currentMap()
+	caveEntranceMap = mapstates.caveEntranceMap()
 
 	# Sprite groups
 	movingSprites = pg.sprite.Group()
@@ -41,9 +42,9 @@ def handle_input():
 
 def process_logic():
 	playerObject.update(keys)
+	currentMap.update(screen)
 
 def draw_game():
-	currentMap.drawMap(screen)
 	playerObject.draw(screen)
 
 	pg.display.flip()
