@@ -52,4 +52,9 @@ class Smirk:
       "This is unrelated to any events, but I talked to my good friend Bart about his views on pineapples. He believes they aren't real. What an idiot.",
       "Funny how pineapples are so unrelated to coffee."
     ]
-    print(voicelines[random.randint(0, 5)])
+
+    newsLabel = font.render(voicelines[random.randint(0, 4)], True, (255, 0, 0))
+
+    pg.draw.rect(screen, (255, 255, 255), (0, 500, 800, 100))
+
+    screen.blit(newsLabel, (text_x, text_y))
