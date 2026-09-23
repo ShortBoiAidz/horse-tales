@@ -1,6 +1,6 @@
 # importing modules
 from data.states import cutscenes, mapstates
-from data.components import sounds, player, characters, objects, enemies
+from data.components import items, sounds, player, characters, enemies
 
 # importing pygame shit
 import pygame as pg
@@ -8,21 +8,31 @@ import sys
 
 WIDTH, HEIGHT = 800, 600
 GAME_NAME = "Horse Tale"
+DEBUG = True
 
 def init_pygame():
-	global carleigheSmirk, danielPrank
+	global clock, carleigheSmirk, danielPrank, playerObject, currentMap, keys, caveEntranceMap
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
+	clock = pg.time.Clock()
 
+	# Character objects
 	carleigheSmirk = characters.Smirk()
 	danielPrank = characters.Prank()
+	playerObject = player.Player()
+
+	# Other objects
+	currentMap = mapstates.currentMap()
+	caveEntranceMap = mapstates.caveEntranceMap()
+
+	# Sprite groups
+	movingSprites = pg.sprite.Group()
+	movingSprites.add(playerObject)
 
 	pg.init()
 	pg.display.set_caption(GAME_NAME)
 
-	carleigheSmirk.draw(screen)
-
-	return screen
+	return screen, clock
 
 def handle_input():
 	for event in pg.event.get():
@@ -30,20 +40,16 @@ def handle_input():
 			pg.quit()
 			sys.exit()
 
-		if event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
-			carleigheSmirk.draw_shot(screen)
-		elif event.type == pg.KEYDOWN and event.key == pg.K_g:
-			danielPrank.draw(screen)
-		elif event.type == pg.KEYDOWN and event.key == pg.K_1:
-			characters.Smirk.dialog(screen)
-
 def process_logic():
-	pass
+	playerObject.update(keys)
+	currentMap.update(screen)
 
 def draw_game():
+	playerObject.draw(screen)
+
 	pg.display.flip()
 
-screen = init_pygame()
+screen, clock = init_pygame()
 
 while True:
 	keys = pg.key.get_pressed()
@@ -56,3 +62,8 @@ while True:
 		if event.type == pg.QUIT:
 			pg.quit()
 			sys.exit()
+
+	if DEBUG:
+		print(f"Player coords: {playerObject.x, playerObject.y}")
+
+	clock.tick(10)
