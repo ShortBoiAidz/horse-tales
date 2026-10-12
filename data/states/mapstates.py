@@ -3,18 +3,16 @@ from data.components import player
 
 class currentMap:
   def __init__(self):
-    self.map = caveEntranceMap()
-    self.mapstate = "innerCave_0"
+    self.mapstate = "caveEntrance"
 
   def update(self, screen, playerObjectRect):
     match self.mapstate:
       case "caveEntrance":
-        self.map.drawMap(screen)
-        self.map.update(screen, playerObjectRect)
+        caveEntranceMapObject.drawMap(screen)
+        caveEntranceMapObject.update(screen, playerObjectRect)
       case "innerCave_0":
-        self.map = innerCaveMap_0()
-        self.map.drawMap(screen)
-        self.map.update(screen, playerObjectRect)
+        innerCaveMap0_Object.drawMap(screen)
+        innerCaveMap0_Object.update(screen, playerObjectRect)
       case "innerCave_1":
         self.map = innerCaveMap_1()
         self.map.drawMap(screen)
@@ -27,17 +25,19 @@ class currentMap:
   def drawHitbox(self, screen):
     match self.mapstate:
       case "caveEntrance":
-        pg.draw.rect(screen, (255, 0, 0), self.map.entranceRect, 2)
+        pg.draw.rect(screen, (255, 0, 0), caveEntranceMapObject.entranceRect, 2)
+
+  def collisionDetection(self, screen, playerObjectRect):
+    if caveEntranceMapObject.entranceRect.colliderect(playerObjectRect): # Only triggers when hitboxes are colliding
+      caveEntranceMapObject.switchMap(screen, playerObject)
 
 class caveEntranceMap:
   def __init__(self):
     self.img = pg.image.load("assets/textures/mapsheets/cave_entrance.png")
-    self.img = pg.transform.scale(self.img, (800, 600))
+    self.img = pg.transform.scale(self.img, (800, 800))
 
     self.entranceRect = pg.Rect(350, 230, 200, 100)
     self.rect = self.img.get_rect()
-
-    self.mapstate = "innerCave_0"
 
   def drawMap(self, screen):
     screen.blit(self.img, self.rect.topleft)
@@ -45,25 +45,24 @@ class caveEntranceMap:
 
   def update(self, screen, playerObjectRect):
     self.entranceRect.update(350, 230, 200, 100)
+    currentMapObject.collisionDetection(screen, playerObjectRect)
 
-    if self.entranceRect.colliderect(playerObjectRect):
-      print("COLLIDE")
-      currentMap.update(self, screen, playerObjectRect)
+  def switchMap(self, screen, playerObjectRect):
+    currentMapObject.mapstate = "innerCave_0"
+    currentMapObject.update(screen, playerObjectRect)
 
 class innerCaveMap_0:
   def __init__(self):
     self.img = pg.image.load("assets/textures/mapsheets/innerCave_0.png")
-    self.img = pg.transform.scale(self.img, (800, 600))
+    self.img = pg.transform.scale(self.img, (800, 800))
 
     self.rect = self.img.get_rect()
-
-    self.mapstate = "innerCave_1"
 
   def drawMap(self, screen):
     screen.blit(self.img, self.rect.topleft)
 
   def update(self, screen, playerObjectRect):
-    if playerObjectRect.x >= 800:
+    if playerObjectRect.x >= 745:
       playerObject.x = 500
       playerObject.draw(screen)
 
@@ -91,5 +90,11 @@ class innerCaveMap_2:
   def update(self):
     pass
 
+class PrintDebug:
+  def printDebug(self):
+    print(f"Mapstate: {currentMapObject.mapstate}")
+
 playerObject = player.Player()
 currentMapObject = currentMap()
+caveEntranceMapObject = caveEntranceMap()
+innerCaveMap0_Object = innerCaveMap_0()

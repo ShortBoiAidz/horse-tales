@@ -15,13 +15,13 @@ from data.components import items, sounds, player, characters, enemies
 import pygame as pg
 import sys
 
-WIDTH, HEIGHT = 800, 600
+WIDTH, HEIGHT = 800, 800
 GAME_NAME = "Horse Tale"
 DEBUG = True
 HITBOX = True
 
 def init_pygame():
-	global clock, carleigheSmirk, danielPrank, playerObject, currentMap, keys
+	global clock, carleigheSmirk, danielPrank, playerObject, currentMap, printMapstateDebug, keys
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
 	clock = pg.time.Clock()
@@ -33,6 +33,7 @@ def init_pygame():
 
 	# Other objects
 	currentMap = mapstates.currentMap()
+	printMapstateDebug = mapstates.PrintDebug()
 
 	# Sprite groups
 	movingSprites = pg.sprite.Group()
@@ -77,6 +78,6 @@ while True:
 			sys.exit()
 
 	if DEBUG:
-		print(f"Player coords: {playerObject.x, playerObject.y}")
+		printMapstateDebug.printDebug()
 
 	clock.tick(10)
