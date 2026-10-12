@@ -28,7 +28,6 @@ class Player(pg.sprite.Sprite):
     # LEFT movement
     if keys[pg.K_LEFT] or keys[pg.K_a] == True:
       self.x -= 10
-      self.rect = self.image.get_rect(center=(self.x, self.y))
       self.current_sprite += 1
 
       if self.current_sprite >= len(self.sprites_left):
@@ -40,7 +39,7 @@ class Player(pg.sprite.Sprite):
     # RIGHT movement
     elif keys[pg.K_RIGHT] or keys[pg.K_d] == True:
       self.x += 10
-      self.rect = self.image.get_rect(center=(self.x, self.y))
+      self.rect.topleft = (self.x, self.y)
       self.current_sprite += 1
 
       if self.current_sprite >= len(self.sprites_right):
@@ -52,7 +51,7 @@ class Player(pg.sprite.Sprite):
     # UP movement
     elif keys[pg.K_UP] or keys[pg.K_w] == True:
       self.y -= 10
-      self.rect = self.image.get_rect(center=(self.x, self.y))
+      self.rect.topleft = (self.x, self.y)
       self.current_sprite += 1
 
       if self.current_sprite >= len(self.sprites_right):
@@ -64,7 +63,7 @@ class Player(pg.sprite.Sprite):
     # DOWN movement
     elif keys[pg.K_DOWN] or keys[pg.K_s] == True:
       self.y += 10
-      self.rect = self.image.get_rect(center=(self.x, self.y))
+      self.rect.topleft = (self.x, self.y)
       self.current_sprite += 1
 
       if self.current_sprite >= len(self.sprites_left):
@@ -74,6 +73,7 @@ class Player(pg.sprite.Sprite):
       self.image = pg.transform.scale(self.image, (128, 128))
 
   def draw(self, screen):
+    self.rect.topleft = (self.x, self.y)
     screen.blit(self.image, self.rect.topleft)
 
   def draw_hitbox(self, screen):
