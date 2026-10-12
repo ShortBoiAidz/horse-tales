@@ -75,3 +75,6 @@ class Player(pg.sprite.Sprite):
 
   def draw(self, screen):
     screen.blit(self.image, self.rect.topleft)
+
+  def draw_hitbox(self, screen):
+    pg.draw.rect(screen, (255, 0, 0), self.rect, 2)

@@ -6,7 +6,7 @@ playerObject = player.Player()
 class currentMap:
   def __init__(self):
     self.map = caveEntranceMap()
-    self.mapstate = "innerCave_0"
+    self.mapstate = "caveEntrance"
 
   def update(self, screen):
     match self.mapstate:
@@ -16,15 +16,20 @@ class currentMap:
       case "innerCave_0":
         self.map = innerCaveMap_0()
         self.map.drawMap(screen)
-        self.map.update()
+        self.map.update(screen)
       case "innerCave_1":
         self.map = innerCaveMap_1()
         self.map.drawMap(screen)
-        self.map.update()
+        self.map.update(screen)
       case "innerCave_2":
         self.map = innerCaveMap_2()
         self.map.drawMap(screen)
-        self.map.update()
+        self.map.update(screen)
+
+  def drawHitbox(self, screen):
+    match self.mapstate:
+      case "caveEntrance":
+        pg.draw.rect(screen, (255, 0, 0), self.map.entranceRect, 2)
 
 class caveEntranceMap:
   def __init__(self):
@@ -34,11 +39,14 @@ class caveEntranceMap:
     self.entranceRect = pg.Rect(350, 230, 200, 100)
     self.rect = self.img.get_rect()
 
+
   def drawMap(self, screen):
     screen.blit(self.img, self.rect.topleft)
     pg.draw.rect(screen, (0), self.entranceRect)
 
   def update(self):
+    self.entranceRect.update(350, 230, 200, 100)
+
     if self.entranceRect.colliderect(playerObject.rect):
       print("COLLIDE")
       currentMapObject.mapstate = "innerCave_0"
@@ -52,9 +60,10 @@ class innerCaveMap_0:
   def drawMap(self, screen):
     screen.blit(self.img, self.rect.topleft)
 
-  def update(self):
+  def update(self, screen):
     if playerObject.x >= 800:
       currentMapObject.mapstate = "innerCave_1"
+      currentMapObject.update(screen)
 
 class innerCaveMap_1:
   def __init__(self):

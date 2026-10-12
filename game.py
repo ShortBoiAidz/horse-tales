@@ -9,6 +9,7 @@ import sys
 WIDTH, HEIGHT = 800, 600
 GAME_NAME = "Horse Tale"
 DEBUG = True
+HITBOX = True
 
 def init_pygame():
 	global clock, carleigheSmirk, danielPrank, playerObject, currentMap, keys
@@ -45,6 +46,10 @@ def process_logic():
 
 def draw_game():
 	playerObject.draw(screen)
+
+	if HITBOX:
+		playerObject.draw_hitbox(screen)
+		currentMap.drawHitbox(screen)
 
 	pg.display.flip()
 
