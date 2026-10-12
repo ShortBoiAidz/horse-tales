@@ -4,7 +4,7 @@ from data.components import player
 class currentMap:
   def __init__(self):
     self.map = caveEntranceMap()
-    self.mapstate = "caveEntrance"
+    self.mapstate = "innerCave_0"
 
   def update(self, screen, playerObjectRect):
     match self.mapstate:
