@@ -1,3 +1,12 @@
+# =====================
+# RULES FOR FORMATTING
+# =====================
+# 1) Keep spacing and tabs consistent (Tab Size: 2)
+# 2) DO NOT fuck with variables if you don't know what they do
+# 3) If something works, DO NOT FUCKING TOUCH IT
+# 4) Listen to other comments (e.g. labels)
+# 5) Keep functions and shit consistent throughout all files
+
 # importing modules
 from data.states import cutscenes, mapstates
 from data.components import items, sounds, player, characters, enemies
