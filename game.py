@@ -42,7 +42,7 @@ def handle_input():
 
 def process_logic():
 	playerObject.update(keys)
-	currentMap.update(screen)
+	currentMap.update(screen, playerObject.rect)
 
 def draw_game():
 	playerObject.draw(screen)

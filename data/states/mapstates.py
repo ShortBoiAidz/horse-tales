@@ -1,30 +1,28 @@
 import pygame as pg
 from data.components import player
 
-playerObject = player.Player()
-
 class currentMap:
   def __init__(self):
     self.map = caveEntranceMap()
     self.mapstate = "caveEntrance"
 
-  def update(self, screen):
+  def update(self, screen, playerObjectRect):
     match self.mapstate:
       case "caveEntrance":
         self.map.drawMap(screen)
-        self.map.update()
+        self.map.update(playerObjectRect)
       case "innerCave_0":
         self.map = innerCaveMap_0()
         self.map.drawMap(screen)
-        self.map.update(screen)
+        self.map.update(playerObjectRect)
       case "innerCave_1":
         self.map = innerCaveMap_1()
         self.map.drawMap(screen)
-        self.map.update(screen)
+        self.map.update(playerObjectRect)
       case "innerCave_2":
         self.map = innerCaveMap_2()
         self.map.drawMap(screen)
-        self.map.update(screen)
+        self.map.update(playerObjectRect)
 
   def drawHitbox(self, screen):
     match self.mapstate:
@@ -44,10 +42,11 @@ class caveEntranceMap:
     screen.blit(self.img, self.rect.topleft)
     pg.draw.rect(screen, (0), self.entranceRect)
 
-  def update(self):
+  def update(self, playerObjectRect):
     self.entranceRect.update(350, 230, 200, 100)
 
-    if self.entranceRect.colliderect(playerObject.rect):
+    print(self.entranceRect, playerObjectRect)
+    if self.entranceRect.colliderect(playerObjectRect):
       print("COLLIDE")
       currentMapObject.mapstate = "innerCave_0"
 
