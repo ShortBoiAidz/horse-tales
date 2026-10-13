@@ -6,7 +6,6 @@ class currentMap:
     self.mapstate = "caveEntrance"
 
   def update(self, screen, playerObjectRect):
-    print(self.mapstate)
     match self.mapstate:
       case "caveEntrance":
         caveEntranceMapObject.drawMap(screen)

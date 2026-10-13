@@ -28,49 +28,22 @@ class Player(pg.sprite.Sprite):
     # LEFT movement
     if keys[pg.K_LEFT] or keys[pg.K_a] == True:
       self.x -= 10
-      self.current_sprite += 1
-
-      if self.current_sprite >= len(self.sprites_left):
-        self.current_sprite = 0
-
-      self.image = self.sprites_left[self.current_sprite]
-      self.image = pg.transform.scale(self.image, (128, 128))
+      self.cycleSprites_left()
 
     # RIGHT movement
     elif keys[pg.K_RIGHT] or keys[pg.K_d] == True:
       self.x += 10
-      self.rect.topleft = (self.x, self.y)
-      self.current_sprite += 1
-
-      if self.current_sprite >= len(self.sprites_right):
-        self.current_sprite = 0
-
-      self.image = self.sprites_right[self.current_sprite]
-      self.image = pg.transform.scale(self.image, (128, 128))
+      self.cycleSprites_right()
 
     # UP movement
     elif keys[pg.K_UP] or keys[pg.K_w] == True:
       self.y -= 10
-      self.rect.topleft = (self.x, self.y)
-      self.current_sprite += 1
-
-      if self.current_sprite >= len(self.sprites_right):
-        self.current_sprite = 0
-
-      self.image = self.sprites_right[self.current_sprite]
-      self.image = pg.transform.scale(self.image, (128, 128))
+      self.cycleSprites_right()
 
     # DOWN movement
     elif keys[pg.K_DOWN] or keys[pg.K_s] == True:
       self.y += 10
-      self.rect.topleft = (self.x, self.y)
-      self.current_sprite += 1
-
-      if self.current_sprite >= len(self.sprites_left):
-        self.current_sprite = 0
-
-      self.image = self.sprites_left[self.current_sprite]
-      self.image = pg.transform.scale(self.image, (128, 128))
+      self.cycleSprites_left()
 
   def draw(self, screen):
     self.rect.topleft = (self.x, self.y)
@@ -78,3 +51,26 @@ class Player(pg.sprite.Sprite):
 
   def draw_hitbox(self, screen):
     pg.draw.rect(screen, (255, 0, 0), self.rect, 2)
+
+  def cycleSprites_left(self):
+    self.rect.topleft = (self.x, self.y)
+    self.current_sprite += 1
+
+    if self.current_sprite >= len(self.sprites_left):
+      self.current_sprite = 0
+
+    self.image = self.sprites_left[self.current_sprite]
+    self.image = pg.transform.scale(self.image, (128, 128))
+
+  def cycleSprites_right(self):
+    self.rect.topleft = (self.x, self.y)
+    self.current_sprite += 1
+
+    if self.current_sprite >= len(self.sprites_right):
+      self.current_sprite = 0
+
+    self.image = self.sprites_right[self.current_sprite]
+    self.image = pg.transform.scale(self.image, (128, 128))
+
+  def printDebug(self):
+    print(f"Player coords: {self.x}, {self.y}")

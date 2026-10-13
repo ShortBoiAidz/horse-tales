@@ -80,5 +80,6 @@ while True:
 
 	if DEBUG:
 		printMapstateDebug.printDebug()
+		playerObject.printDebug()
 
 	clock.tick(10)
