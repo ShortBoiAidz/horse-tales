@@ -5,8 +5,9 @@
 # 2) DO NOT fuck with variables if you don't know what they do
 # 3) If something works, DO NOT FUCKING TOUCH IT
 # 4) Listen to other comments (e.g. labels)
-# 5) Keep functions and shit consistent throughout all files
+# 5) Keep names and shit consistent throughout all files
 # 6) DO NOT FUCKING NEST. NEVER NEST. WE HATE NESTERS. NO STUPID IF STATEMENTS INSIDE OTHER IF STATEMENTS. FIND A BETTER SOLUTION.
+# 7) Try to avoid repeating code. Call another function if you have to
 
 # importing modules
 from data.states import cutscenes, mapstates
