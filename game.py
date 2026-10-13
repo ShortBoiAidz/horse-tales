@@ -11,11 +11,12 @@
 
 # importing modules
 from data.states import cutscenes, mapstates
-from data.components import items, sounds, player, characters, enemies
+from data.components import items, sounds, player, characters, enemies, maps
 
 # importing pygame shit
 import pygame as pg
 import sys
+from pytmx.util_pygame import load_pygame as lpg
 
 WIDTH, HEIGHT = 800, 800
 GAME_NAME = "Horse Tale"
@@ -58,6 +59,7 @@ def process_logic():
 
 def draw_game():
 	playerObject.draw(screen)
+	maps.barTileObject.draw(screen)
 
 	if HITBOX:
 		playerObject.draw_hitbox(screen)
