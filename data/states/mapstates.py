@@ -6,6 +6,7 @@ class currentMap:
     self.mapstate = "caveEntrance"
 
   def update(self, screen, playerObjectRect):
+    print(self.mapstate)
     match self.mapstate:
       case "caveEntrance":
         caveEntranceMapObject.drawMap(screen)
@@ -13,19 +14,13 @@ class currentMap:
       case "innerCave_0":
         innerCaveMap0_Object.drawMap(screen)
         innerCaveMap0_Object.update(screen, playerObjectRect)
-      case "innerCave_1":
-        self.map = innerCaveMap_1()
-        self.map.drawMap(screen)
-        self.map.update(screen, playerObjectRect)
-      case "innerCave_2":
-        self.map = innerCaveMap_2()
-        self.map.drawMap(screen)
-        self.map.update(screen, playerObjectRect)
 
   def drawHitbox(self, screen):
     match self.mapstate:
       case "caveEntrance":
         pg.draw.rect(screen, (255, 0, 0), caveEntranceMapObject.entranceRect, 2)
+      case "innerCave_0":
+        pass
 
   def collisionDetection(self, screen, playerObjectRect):
     if caveEntranceMapObject.entranceRect.colliderect(playerObjectRect): # Only triggers when hitboxes are colliding
@@ -65,30 +60,6 @@ class innerCaveMap_0:
     if playerObjectRect.x >= 745:
       playerObject.x = 500
       playerObject.draw(screen)
-
-class innerCaveMap_1:
-  def __init__(self):
-    self.img = pg.image.load("assets/textures/mapsheets/innerCave_1.png")
-    self.img = pg.transform.scale(self.img, (800, 600))
-    self.rect = self.img.get_rect()
-
-  def drawMap(self, screen):
-    screen.blit(self.img, self.rect.topleft)
-
-  def update(self):
-    pass
-
-class innerCaveMap_2:
-  def __init__(self):
-    self.img = pg.image.load("assets/textures/mapsheets/innerCave_2.png")
-    self.img = pg.transform.scale(self.img, (800, 600))
-    self.rect = self.img.get_rect()
-
-  def drawMap(self, screen):
-    screen.blit(self.img, self.rect.topleft)
-
-  def update(self):
-    pass
 
 class PrintDebug:
   def printDebug(self):
