@@ -21,24 +21,15 @@ class Rooster:
     self.x = 0
     self.y = 0
 
-class Smirk:
+class Bartender:
   def __init__(self):
-    self.image = pg.image.load("assets/textures/characters/carleighe_smirk/idle.png")
-    self.image_shot = pg.image.load("assets/textures/characters/carleighe_smirk/shot.png")
-    self.x = 700 // 2
-    self.y = 500 // 2
+    self.image = pg.image.load("assets/textures/characters/bartender/idle.png")
+    self.x = 360
+    self.y = 390
 
   def draw(self, screen):
-    sounds.stopSounds()
-    sounds.newsSound()
     screen.blit(self.image, (self.x, self.y))
-
-  def draw_shot(self, screen):
-    sounds.stopSounds()
-    sounds.smirkShotSound()
-    screen.blit(self.image_shot, (self.x, self.y))
-    pg.time.delay(1000)
-    sounds.sadSound()
+    self.image = pg.transform.scale(self.image, (72, 72))
 
   def dialog(screen):
     font = pg.font.SysFont("Comic Sans MS", 20)

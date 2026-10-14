@@ -21,26 +21,35 @@ from pytmx.util_pygame import load_pygame as lpg
 WIDTH, HEIGHT = 800, 800
 GAME_NAME = "Horse Tale"
 DEBUG = True
-HITBOX = True
+HITBOX = False
 
 def init_pygame():
-	global clock, carleigheSmirk, danielPrank, playerObject, currentMap, printMapstateDebug, keys
+	global clock, bartender, danielPrank, playerObject, currentMap, printMapstateDebug, keys, barMap, mapSprites
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
 	clock = pg.time.Clock()
 
 	# Character objects
-	carleigheSmirk = characters.Smirk()
+	bartender = characters.Bartender()
 	danielPrank = characters.Prank()
 	playerObject = player.Player()
 
-	# Other objects
+	# Map objects
 	currentMap = mapstates.currentMap()
 	printMapstateDebug = mapstates.PrintDebug()
+	drawMaps = maps.DrawMaps()
 
 	# Sprite groups
 	movingSprites = pg.sprite.Group()
 	movingSprites.add(playerObject)
+
+	mapSprites = pg.sprite.Group()
+
+	# More stuff
+	barMap = maps.BarMap((0, 0), screen, mapSprites)
+	bar = lpg("assets/textures/mapsheets/bar.tmx")
+	drawMaps.draw(bar, mapSprites)
+	mapSprites.add(barMap)
 
 	pg.init()
 	pg.display.set_caption(GAME_NAME)
@@ -55,11 +64,12 @@ def handle_input():
 
 def process_logic():
 	playerObject.update(keys)
-	currentMap.update(screen, playerObject.rect)
+	#currentMap.update(screen, playerObject.rect)
 
 def draw_game():
+	barMap.draw(screen, mapSprites)
+	bartender.draw(screen)
 	playerObject.draw(screen)
-	maps.barTileObject.draw(screen)
 
 	if HITBOX:
 		playerObject.draw_hitbox(screen)
