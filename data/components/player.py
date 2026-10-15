@@ -1,10 +1,11 @@
 import pygame as pg
+from PygameTkinterGUITools import *
 
 class Player(pg.sprite.Sprite):
   def __init__(self):
     super().__init__()
-    self.x = 500
-    self.y = 500
+    self.x = 160
+    self.y = 150
 
     self.sprites_left = []
     self.sprites_right = []
@@ -72,4 +73,4 @@ class Player(pg.sprite.Sprite):
     self.image = pg.transform.scale(self.image, (72, 72))
 
   def printDebug(self):
-    print(f"Player coords: {self.x}, {self.y}")
+    print(f"Player coords: ({self.x}, {self.y})")

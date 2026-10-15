@@ -1,5 +1,6 @@
 import pygame as pg
 from pytmx.util_pygame import load_pygame as lpg
+from PygameTkinterGUITools import *
 
 from data.states import mapstates
 

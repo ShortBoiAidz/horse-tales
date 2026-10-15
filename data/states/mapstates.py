@@ -2,6 +2,7 @@ import pygame as pg
 
 from data.components import player, maps, sounds
 from data.states import soundstates
+from PygameTkinterGUITools import *
 
 class defineObjects():
   def __init__(self):
@@ -32,7 +33,7 @@ class currentMap:
       case "bar":
         bar.draw(screen, mapSprites)
       case "cave":
-        sounds.caveTheme()
+        pass
       case "jungle":
         pass
 
