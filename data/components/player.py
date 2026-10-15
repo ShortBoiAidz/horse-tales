@@ -21,7 +21,7 @@ class Player(pg.sprite.Sprite):
     self.current_sprite = 0
     self.image = self.sprites_left[self.current_sprite]
     self.image = self.sprites_right[self.current_sprite]
-    self.image = pg.transform.scale(self.image, (128, 128))
+    self.image = pg.transform.scale(self.image, (64, 64))
     self.rect = self.image.get_rect(center=(self.x, self.y))
 
   def update(self, keys):
@@ -60,7 +60,7 @@ class Player(pg.sprite.Sprite):
       self.current_sprite = 0
 
     self.image = self.sprites_left[self.current_sprite]
-    self.image = pg.transform.scale(self.image, (128, 128))
+    self.image = pg.transform.scale(self.image, (64, 64))
 
   def cycleSprites_right(self):
     self.rect.topleft = (self.x, self.y)
@@ -70,7 +70,7 @@ class Player(pg.sprite.Sprite):
       self.current_sprite = 0
 
     self.image = self.sprites_right[self.current_sprite]
-    self.image = pg.transform.scale(self.image, (128, 128))
+    self.image = pg.transform.scale(self.image, (64, 64))
 
   def printDebug(self):
     print(f"Player coords: {self.x}, {self.y}")
