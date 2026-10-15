@@ -25,11 +25,11 @@ class Bartender:
   def __init__(self):
     self.image = pg.image.load("assets/textures/characters/bartender/idle.png")
     self.x = 360
-    self.y = 390
+    self.y = 190
 
   def draw(self, screen):
     screen.blit(self.image, (self.x, self.y))
-    self.image = pg.transform.scale(self.image, (72, 72))
+    self.image = pg.transform.scale(self.image, (64, 64))
 
   def dialog(screen):
     font = pg.font.SysFont("Comic Sans MS", 20)

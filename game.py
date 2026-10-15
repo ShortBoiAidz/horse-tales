@@ -95,4 +95,4 @@ while True:
 		printMapstateDebug.printDebug()
 		playerObject.printDebug()
 
-	clock.tick(10)
+	clock.tick(15)

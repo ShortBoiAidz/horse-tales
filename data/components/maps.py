@@ -18,5 +18,5 @@ class DrawMaps():
     for layer in bar.visible_layers:
       if hasattr(layer, "data"):
         for x, y, surface in layer.tiles():
-          pos = (x * 16, y * 32)
+          pos = (x * 16, y * 16)
           BarMap(pos, surface, mapSprites)
