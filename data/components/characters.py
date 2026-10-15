@@ -1,51 +1,57 @@
 import pygame as pg
 
 from data.components import sounds
+from data.states import mapstates
 
-import random
-
-class Prank:
+class Bartender(pg.sprite.Sprite):
   def __init__(self):
-    self.image = pg.image.load("assets/textures/characters/daniel_prank/idle.png")
-    self.x = 700 // 2
-    self.y = 500 // 2
-
-  def draw(self, screen):
-    screen.blit(self.image, (self.x, self.y))
-    sounds.stopSounds()
-    sounds.danielPrankSound()
-
-class Rooster:
-  def __init__(self):
-    self.image = pg.image.load("assets/textures/characters/riley_rooster/idle.png")
-    self.x = 0
-    self.y = 0
-
-class Bartender:
-  def __init__(self):
-    self.image = pg.image.load("assets/textures/characters/bartender/idle.png")
+    super().__init__()
     self.x = 360
-    self.y = 190
+    self.y = 167
+
+    self.idleImage = pg.image.load("assets/textures/characters/bartender/idle.png")
+    self.idleImage = pg.transform.scale(self.idleImage, (72, 72))
+
+    self.status = "active"
+
+    self.sprites = []
+
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (1).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (2).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (3).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (4).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (5).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (6).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (7).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (8).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (9).png"))
+
+    self.current_sprite = 0
+
+    self.rect = self.idleImage.get_rect(center=(self.x, self.y))
 
   def draw(self, screen):
-    screen.blit(self.image, (self.x, self.y))
-    self.image = pg.transform.scale(self.image, (64, 64))
+    if self.status == "inactive":
+      self.rect.topleft = (self.x, self.y)
+      screen.blit(self.idleImage, self.rect.topleft)
+    else:
+      self.cycleAnimation(screen)
 
-  def dialog(screen):
-    font = pg.font.SysFont("Comic Sans MS", 20)
-    text_y = 530
-    text_x = 500
+  def update(self, keys):
+    if keys[pg.K_e] or keys[pg.K_SPACE] == True:
+      self.status = "inactive"
 
-    voicelines = [
-      "Last night, there was a fire in the Bronx last night that killed people during the fire last night in the Bronx. They say they died due to the fire being too hot for their bodies. Bummer.",
-      "An unknown killer is loose in the town. For your own safety, stay inside and do not trust anyone.",
-      "My friend Bart says pasta isn't real. I told him that he's just thinking of 'Italian' people.",
-      "This is unrelated to any events, but I talked to my good friend Bart about his views on pineapples. He believes they aren't real. What an idiot.",
-      "Funny how pineapples are so unrelated to coffee."
-    ]
+  def cycleAnimation(self, screen):
+    self.rect.topleft = (self.x, self.y)
+    self.current_sprite += 1
 
-    newsLabel = font.render(voicelines[random.randint(0, 4)], True, (255, 0, 0))
+    if self.current_sprite >= len(self.sprites):
+      self.current_sprite = 0
 
-    pg.draw.rect(screen, (255, 255, 255), (0, 500, 800, 100))
+    self.animatedImage = self.sprites[self.current_sprite]
+    self.animatedImage = pg.transform.scale(self.animatedImage, (72, 72))
 
-    screen.blit(newsLabel, (text_x, text_y))
+    screen.blit(self.animatedImage, self.rect.topleft)
+
+  def printDebug(self):
+    print(f"Bartender status: {self.status}")
