@@ -38,7 +38,7 @@ class Bartender(pg.sprite.Sprite):
     self.activeMessage = 0
     self.dialogue = self.dialogue[self.activeMessage]
 
-    textRunning = False
+    self.textRunning = False
 
     self.status = "inactive"
 
@@ -65,11 +65,10 @@ class Bartender(pg.sprite.Sprite):
     else:
       self.cycleAnimation(screen)
 
-  def update(self, keys, screen):
-    global textRunning
+  def update(self, keys):
 
     if keys[pg.K_e] or keys[pg.K_SPACE] == True:
-      textRunning = True
+      self.textRunning = True
       self.status = "active"
       pg.display.flip()
 
@@ -91,12 +90,13 @@ class Bartender(pg.sprite.Sprite):
 
     screen.blit(self.animatedImage, self.rect.topleft)
 
-  def printDebug(self):
+  def printDebug(self, message):
     print(f"Bartender status: {self.status}")
+    print(message)
 
 bartenderObj = Bartender()
 
-while textRunning:
+while bartenderObj.status == "active":
   pg.draw.rect(screen, (20, 20, 60), [0, 300, 800, 200])
   if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialogue):
     bartenderObj.textCounter += 1
