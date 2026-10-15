@@ -2,6 +2,7 @@ import pygame as pg
 
 from data.states import mapstates
 from data.components import sounds
+from PygameTkinterGUITools import *
 
 class checkSounds():
   def __init__(self):
@@ -13,8 +14,11 @@ class checkSounds():
   def playSound(self):
     match self.mapstate:
       case "bar":
+        sounds.barTheme()
+        self.sound = "Long Face | DJ Foot Fungus"
+      case "cave":
         sounds.caveTheme()
-        self.sound = "Cave Theme"
+        self.sound = "Wow Magic | 1empted"
 
   def printDebug(self):
     print(f"Current track: {self.sound}")

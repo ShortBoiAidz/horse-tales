@@ -2,9 +2,22 @@ import pygame as pg
 
 from data.components import sounds
 from data.states import mapstates
+from PygameTkinterGUITools import *
+
+DIALOGUE = [
+  "Why the long face?"
+]
+
+def nextLine():
+  global line
+
+  line = (line + 1) % len(DIALOGUE)
+  dialogue.config(text=DIALOGUE[line])
 
 class Bartender(pg.sprite.Sprite):
   def __init__(self):
+    global line, dialogue, rule
+
     super().__init__()
     self.x = 360
     self.y = 167
@@ -30,6 +43,16 @@ class Bartender(pg.sprite.Sprite):
 
     self.rect = self.idleImage.get_rect(center=(self.x, self.y))
 
+    line = 0
+    rule = Separator(150, 100, length=500)
+    dialogue = Message(100, 380, DIALOGUE[0],
+                       width=600,
+                       bg=(20, 20, 60),
+                       fg=(255, 255, 255),
+                       padding=16,
+                       font_size=28
+                       )
+
   def draw(self, screen):
     if self.status == "inactive":
       self.rect.topleft = (self.x, self.y)
@@ -37,9 +60,13 @@ class Bartender(pg.sprite.Sprite):
     else:
       self.cycleAnimation(screen)
 
-  def update(self, keys):
+  def update(self, keys, screen):
     if keys[pg.K_e] or keys[pg.K_SPACE] == True:
       self.status = "inactive"
+      dialogue.draw(screen)
+      pg.display.flip()
+    elif keys[pg.K_KP_ENTER]:
+      nextLine()
 
   def cycleAnimation(self, screen):
     self.rect.topleft = (self.x, self.y)

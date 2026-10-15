@@ -13,6 +13,7 @@
 # importing modules
 from data.states import cutscenes, mapstates, soundstates
 from data.components import items, sounds, player, characters, enemies, maps
+from PygameTkinterGUITools import *
 
 # importing pygame shit
 import pygame as pg
@@ -21,7 +22,7 @@ from pytmx.util_pygame import load_pygame as lpg
 
 WIDTH, HEIGHT = 800, 800
 GAME_NAME = "Horse Tale"
-DEBUG = False
+DEBUG = True
 HITBOX = False
 
 def init_pygame():
@@ -68,7 +69,7 @@ def handle_input():
 
 def process_logic():
 	mapstatesDefineObjects.update()
-	bartender.update(keys)
+	bartender.update(keys, screen)
 	playerObject.update(keys)
 	currentMap.update((0, 0), screen, mapSprites)
 
@@ -84,6 +85,8 @@ def draw_game():
 	pg.display.flip()
 
 screen, clock = init_pygame()
+
+soundstatesObject.playSound()
 
 while True:
 	keys = pg.key.get_pressed()
