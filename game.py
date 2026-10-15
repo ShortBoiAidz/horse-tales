@@ -8,9 +8,10 @@
 # 5) Keep names and shit consistent throughout all files
 # 6) DO NOT FUCKING NEST. NEVER NEST. WE HATE NESTERS. NO STUPID IF STATEMENTS INSIDE OTHER IF STATEMENTS. FIND A BETTER SOLUTION.
 # 7) Try to avoid repeating code. Call another function if you have to
+# 8) Try to keep camelCase and rarely use snake_case
 
 # importing modules
-from data.states import cutscenes, mapstates
+from data.states import cutscenes, mapstates, soundstates
 from data.components import items, sounds, player, characters, enemies, maps
 
 # importing pygame shit
@@ -20,35 +21,38 @@ from pytmx.util_pygame import load_pygame as lpg
 
 WIDTH, HEIGHT = 800, 800
 GAME_NAME = "Horse Tale"
-DEBUG = True
+DEBUG = False
 HITBOX = False
 
 def init_pygame():
-	global clock, bartender, danielPrank, playerObject, currentMap, printMapstateDebug, keys, barMap, mapSprites
+	global clock, bartender, playerObject, currentMap, printMapstateDebug, keys, barMap, mapSprites, mapstatesDefineObjects, soundstatesObject, drawMaps, bar
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
 	clock = pg.time.Clock()
 
 	# Character objects
 	bartender = characters.Bartender()
-	danielPrank = characters.Prank()
 	playerObject = player.Player()
 
-	# Map objects
+	# Map shit
+	mapSprites = pg.sprite.Group() # MAPSPRITES. THIS IS IMPORTANT. DO NOT MOVE.
+
+	mapstatesDefineObjects = mapstates.defineObjects()
 	currentMap = mapstates.currentMap()
 	printMapstateDebug = mapstates.PrintDebug()
 	drawMaps = maps.DrawMaps()
+
+	# Objects and stuff
+	soundstatesObject = soundstates.checkSounds()
 
 	# Sprite groups
 	movingSprites = pg.sprite.Group()
 	movingSprites.add(playerObject)
 
-	mapSprites = pg.sprite.Group()
-
 	# More stuff
 	barMap = maps.BarMap((0, 0), screen, mapSprites)
 	bar = lpg("assets/textures/mapsheets/bar.tmx")
-	drawMaps.draw(bar, mapSprites)
+
 	mapSprites.add(barMap)
 
 	pg.init()
@@ -63,16 +67,18 @@ def handle_input():
 			sys.exit()
 
 def process_logic():
+	mapstatesDefineObjects.update()
+	bartender.update(keys)
 	playerObject.update(keys)
-	#currentMap.update(screen, playerObject.rect)
+	currentMap.update((0, 0), screen, mapSprites)
 
 def draw_game():
-	barMap.draw(screen, mapSprites)
 	bartender.draw(screen)
 	playerObject.draw(screen)
+	drawMaps.draw(bar, mapSprites)
 
 	if HITBOX:
-		playerObject.draw_hitbox(screen)
+		playerObject.drawHitbox(screen)
 		currentMap.drawHitbox(screen)
 
 	pg.display.flip()
@@ -94,5 +100,7 @@ while True:
 	if DEBUG:
 		printMapstateDebug.printDebug()
 		playerObject.printDebug()
+		bartender.printDebug()
+		soundstatesObject.printDebug()
 
-	clock.tick(15)
+	clock.tick(17)
