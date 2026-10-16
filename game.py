@@ -69,14 +69,14 @@ def handle_input():
 
 def process_logic():
 	mapstatesDefineObjects.update()
-	bartender.update(keys)
 	playerObject.update(keys)
 	currentMap.update((0, 0), screen, mapSprites)
+	bartender.update(keys)
 
 def draw_game():
-	bartender.draw(screen)
 	playerObject.draw(screen)
 	drawMaps.draw(bar, mapSprites)
+	bartender.draw(screen)
 
 	if HITBOX:
 		playerObject.drawHitbox(screen)
@@ -105,13 +105,6 @@ while True:
 		printMapstateDebug.printDebug()
 		playerObject.printDebug()
 		soundstatesObject.printDebug()
-		bartender.printDebug('')
-
-		if bartender.status == "active":
-				bartender.printDebug("WHILE LOOP IS ACTIVE")
-		else:
-			bartender.printDebug("WHILE LOOP IS INACTIVE")
-
-		print("========")
+		bartender.printDebug(f"Bartender status: {bartender.status}")
 
 	clock.tick(17)
