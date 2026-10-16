@@ -67,17 +67,18 @@ class Bartender(pg.sprite.Sprite):
 
   def update(self, keys):
 
-    if keys[pg.K_RETURN] and self.textCompleted and self.activeMessage < len(self.dialog):
-      self.activeMessage += 1
-      self.textRunning = True
-      self.textCompleted = False
-      self.dialog = self.dialog[self.activeMessage]
-      self.textCounter = 0
-    elif (keys[pg.K_e] == True) and self.textRunning == False:
-      self.textRunning = True
-      self.status = "active"
-      runText()
-      pg.display.flip()
+    for event in pg.event.get():
+      if event.type == pg.K_RETURN and self.textCompleted and self.activeMessage < len(self.dialog):
+        self.activeMessage += 1
+        self.textRunning = True
+        self.textCompleted = False
+        self.dialog = self.dialog[self.activeMessage]
+        self.textCounter = 0
+      elif (keys[pg.K_e] == True) and self.textRunning == False:
+        self.textRunning = True
+        self.status = "active"
+        runText()
+        pg.display.flip()
 
   def cycleAnimation(self, screen):
     self.rect.topleft = (self.x, self.y)
