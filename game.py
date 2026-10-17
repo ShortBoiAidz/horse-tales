@@ -14,7 +14,6 @@
 from data.states import cutscenes, mapstates, soundstates
 from data.components import items, sounds, player, characters, enemies, maps
 from PygameTkinterGUITools import *
-
 # importing pygame shit
 import pygame as pg
 import sys
