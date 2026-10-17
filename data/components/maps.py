@@ -8,24 +8,23 @@ from data.components import player
 SPEED = 200
 
 class Bar():
-  def __init__():
+  def __init__(self):
     global world, camera, zoom_camera, playerObj, body, walls, bar
 
     playerObj = player.Player()
 
     bar = TiledMap("assets/textures/mapsheets/bar.tmx")
     walls = [obj["rect"] for obj in bar.collision_objects]
-    body = TopDownBody(playerObj, solids=walls, speed=SPEED, hitbox=10)
+    body = TopDownBody(playerObj, solids=walls, speed=SPEED)
 
     camera = Camera(bar.width, bar.height, (800, 800))
     camera.follow(player)
     zoom_camera = ZoomCamera(camera, (800, 800), zoom=1.5)
-    zoom_camera.snap()
 
-    world = World(bar, camera, y_sort=True)
+    world = World(bar, camera)
     world.add_sprite(playerObj)
 
-  def update(tick):
+  def update(self, tick):
     keys = pg.key.get_pressed()
 
     ground = bar.tile_properties_at(body.hitbox_rect.center)
@@ -40,7 +39,7 @@ class Bar():
     world.update(tick)
     zoom_camera.update(tick)
 
-  def drawMap(screen):
+  def drawMap(self, screen):
     zoom_camera.draw_world(world, screen)
 
     if Debug.on:

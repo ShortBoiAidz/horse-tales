@@ -19,19 +19,19 @@ class currentMap:
   def __init__(self):
     self.mapstate = "bar"
 
-  def loadMap():
+  def loadMap(self):
     global bar
 
-    bar = maps.BarMap()
+    bar = maps.Bar()
 
   def checkSounds(self):
     pass
 
-  def update(self):
+  def update(self, screen):
     self.loadMap()
     match self.mapstate:
       case "bar":
-        bar.drawMap()
+        bar.drawMap(screen)
       case "cave":
         pass
       case "jungle":
