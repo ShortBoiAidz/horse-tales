@@ -16,11 +16,11 @@ class Bartender(pg.sprite.Sprite):
     global line, textRunning
 
     super().__init__()
-    self.x = 360
-    self.y = 167
+    self.x = 470
+    self.y = 265
 
     self.idleImage = pg.image.load("assets/textures/characters/bartender/idle.png")
-    self.idleImage = pg.transform.scale(self.idleImage, (72, 72))
+    self.idleImage = pg.transform.scale(self.idleImage, (96, 96))
 
     pg.font.init()
     self.font = pg.font.Font('freesansbold.ttf', 24)
@@ -67,18 +67,17 @@ class Bartender(pg.sprite.Sprite):
 
   def update(self, keys):
 
-    for event in pg.event.get():
-      if (keys[pg.K_e] == True) and self.textRunning == False:
-        self.textRunning = True
-        self.status = "active"
-        runText()
-        pg.display.flip()
-      elif event.type == pg.K_RETURN and self.textCompleted and self.activeMessage < len(self.dialog):
-        self.activeMessage += 1
-        self.textRunning = True
-        self.textCompleted = False
-        self.dialog = self.dialog[self.activeMessage]
-        self.textCounter = 0
+    if (keys[pg.K_e] == True) and self.textRunning == False:
+      self.textRunning = True
+      self.status = "active"
+      runText()
+      pg.display.flip()
+    #elif event.type == pg.K_RETURN and self.textCompleted and self.activeMessage < len(self.dialog):
+     # self.activeMessage += 1
+      #self.textRunning = True
+      # self.textCompleted = False
+      # self.dialog = self.dialog[self.activeMessage]
+      # self.textCounter = 0
 
   def cycleAnimation(self, screen):
     self.rect.topleft = (self.x, self.y)
@@ -88,7 +87,7 @@ class Bartender(pg.sprite.Sprite):
       self.current_sprite = 0
 
     self.animatedImage = self.sprites[self.current_sprite]
-    self.animatedImage = pg.transform.scale(self.animatedImage, (72, 72))
+    self.animatedImage = pg.transform.scale(self.animatedImage, (96, 96))
 
     screen.blit(self.animatedImage, self.rect.topleft)
 
