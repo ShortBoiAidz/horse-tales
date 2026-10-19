@@ -4,8 +4,8 @@ from PygameTkinterGUITools import *
 class Player(pg.sprite.Sprite):
   def __init__(self):
     super().__init__()
-    self.x = 160
-    self.y = 150
+    self.x = 250
+    self.y = 230
 
     self.sprites_left = []
     self.sprites_right = []
@@ -21,7 +21,7 @@ class Player(pg.sprite.Sprite):
     self.current_sprite = 0
     self.image = self.sprites_left[self.current_sprite]
     self.image = self.sprites_right[self.current_sprite]
-    self.image = pg.transform.scale(self.image, (72, 72))
+    self.image = pg.transform.scale(self.image, (96, 96))
     self.rect = self.image.get_rect(center=(self.x, self.y))
 
   def update(self, keys):
@@ -60,7 +60,7 @@ class Player(pg.sprite.Sprite):
       self.current_sprite = 0
 
     self.image = self.sprites_left[self.current_sprite]
-    self.image = pg.transform.scale(self.image, (72, 72))
+    self.image = pg.transform.scale(self.image, (96, 96))
 
   def cycleSprites_right(self):
     self.rect.topleft = (self.x, self.y)
@@ -70,7 +70,7 @@ class Player(pg.sprite.Sprite):
       self.current_sprite = 0
 
     self.image = self.sprites_right[self.current_sprite]
-    self.image = pg.transform.scale(self.image, (72, 72))
+    self.image = pg.transform.scale(self.image, (96, 96))
 
   def printDebug(self):
     print(f"Player coords: ({self.x}, {self.y})")

@@ -25,13 +25,13 @@ DEBUG = True
 HITBOX = False
 
 def init_pygame():
-	global clock, bartender, playerObject, currentMap, printMapstateDebug, keys, mapSprites, mapstatesDefineObjects, soundstatesObject, bar, barMap
+	global clock, bartenderObj, playerObject, currentMap, printMapstateDebug, keys, mapSprites, mapstatesDefineObjects, soundstatesObject, bar, barMap
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
 	clock = pg.time.Clock()
 
 	# Character objects
-	bartender = characters.Bartender()
+	bartenderObj = characters.Bartender()
 	playerObject = player.Player()
 
 	# Map shit
@@ -67,11 +67,11 @@ def process_logic():
 	mapstatesDefineObjects.update()
 	playerObject.update(keys)
 	currentMap.update(screen)
-	bartender.update(keys)
+	bartenderObj.update(keys)
 
 def draw_game():
 	barMap.drawMap(screen)
-	bartender.draw(screen)
+	bartenderObj.draw(screen)
 	playerObject.draw(screen)
 
 	if HITBOX:
@@ -101,6 +101,6 @@ while True:
 		printMapstateDebug.printDebug()
 		playerObject.printDebug()
 		soundstatesObject.printDebug()
-		bartender.printDebug(f"Bartender status: {bartender.status}")
+		bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
 
 	clock.tick(17)

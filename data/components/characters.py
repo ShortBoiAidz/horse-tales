@@ -16,11 +16,11 @@ class Bartender(pg.sprite.Sprite):
     global line, textRunning
 
     super().__init__()
-    self.x = 360
-    self.y = 167
+    self.x = 470
+    self.y = 265
 
     self.idleImage = pg.image.load("assets/textures/characters/bartender/idle.png")
-    self.idleImage = pg.transform.scale(self.idleImage, (72, 72))
+    self.idleImage = pg.transform.scale(self.idleImage, (96, 96))
 
     pg.font.init()
     self.font = pg.font.Font('freesansbold.ttf', 24)
@@ -87,7 +87,7 @@ class Bartender(pg.sprite.Sprite):
       self.current_sprite = 0
 
     self.animatedImage = self.sprites[self.current_sprite]
-    self.animatedImage = pg.transform.scale(self.animatedImage, (72, 72))
+    self.animatedImage = pg.transform.scale(self.animatedImage, (96, 96))
 
     screen.blit(self.animatedImage, self.rect.topleft)
 
