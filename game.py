@@ -103,5 +103,4 @@ while True:
 		soundstatesObject.printDebug()
 		bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
 
-	clock.tick(17)
-	# test commit. save to delete this comment.
+	clock.tick(20)
