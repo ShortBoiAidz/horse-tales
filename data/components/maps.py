@@ -3,21 +3,46 @@ from pytmx.util_pygame import load_pygame as lpg
 from PygameTkinterGUITools import *
 
 from data.states import mapstates
+from data.components import player
 
-class BarMap(pg.sprite.Sprite):
-  def __init__(self, pos, surface, groups):
-    super().__init__(groups)
+SPEED = 200
 
-    self.image = surface
-    self.rect = self.image.get_rect(topleft = pos)
+class Bar():
+  def __init__(self):
+    global world, camera, zoom_camera, playerObj, body, walls, bar
 
-  def draw(self, screen, mapSprites):
-    mapSprites.draw(screen)
+    playerObj = player.Player()
 
-class DrawMaps():
-  def draw(self, bar, mapSprites):
-    for layer in bar.visible_layers:
-      if hasattr(layer, "data"):
-        for x, y, surface in layer.tiles():
-          pos = (x * 16, y * 16)
-          BarMap(pos, surface, mapSprites)
+    bar = TiledMap("assets/textures/mapsheets/bar.tmx")
+    walls = [obj["rect"] for obj in bar.collision_objects]
+    body = TopDownBody(playerObj, solids=walls, speed=SPEED)
+
+    camera = Camera(bar.width, bar.height, (800, 800))
+    camera.follow(player)
+    zoom_camera = ZoomCamera(camera, (800, 800), zoom=1.5)
+
+    world = World(bar, camera)
+    world.add_sprite(playerObj)
+
+  def update(self, tick):
+    keys = pg.key.get_pressed()
+
+    ground = bar.tile_properties_at(body.hitbox_rect.center)
+    speed = SPEED * ground.get("speed", 1)
+
+    dx = keys[pg.K_RIGHT] - keys[pg.K_LEFT]
+    dy = keys[pg.K_DOWN] - keys[pg.K_UP]
+
+    body.move(dx, dy, speed)
+    body.update(tick)
+
+    world.update(tick)
+    zoom_camera.update(tick)
+
+  def drawMap(self, screen):
+    zoom_camera.draw_world(world, screen)
+
+    if Debug.on:
+      body.draw_debug(screen, zoom_camera)
+      for wall in walls:
+        pg.draw.rect(screen, (255, 0, 0), zoom_camera.apply(wall), 1)

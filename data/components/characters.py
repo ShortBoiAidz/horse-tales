@@ -4,19 +4,16 @@ from data.components import sounds
 from data.states import mapstates
 from PygameTkinterGUITools import *
 
-DIALOGUE = [
-  "Why the long face?"
-]
+screen = pg.display.set_mode([800, 800])
 
 def nextLine():
   global line
 
-  line = (line + 1) % len(DIALOGUE)
-  dialogue.config(text=DIALOGUE[line])
+  line = (line + 1) % len(bartenderObj.dialog)
 
 class Bartender(pg.sprite.Sprite):
   def __init__(self):
-    global line, dialogue, rule
+    global line, textRunning
 
     super().__init__()
     self.x = 360
@@ -25,7 +22,25 @@ class Bartender(pg.sprite.Sprite):
     self.idleImage = pg.image.load("assets/textures/characters/bartender/idle.png")
     self.idleImage = pg.transform.scale(self.idleImage, (72, 72))
 
-    self.status = "active"
+    pg.font.init()
+    self.font = pg.font.Font('freesansbold.ttf', 24)
+
+    self.textCounter = 0
+    self.textSpeed = 1
+    self.textCompleted = False
+    self.snip = self.font.render('', True, (255, 255, 255))
+
+    self.dialog = [
+                      "You seem down. Why the long face?",
+                      "Oh...you're upset? I'd hate to be you.",
+                      "My go-to solution is always resorting to alcohol. Fancy a beer?"
+                    ]
+    self.activeMessage = 0
+    self.dialog = self.dialog[self.activeMessage]
+
+    self.textRunning = False
+
+    self.status = "inactive"
 
     self.sprites = []
 
@@ -43,30 +58,27 @@ class Bartender(pg.sprite.Sprite):
 
     self.rect = self.idleImage.get_rect(center=(self.x, self.y))
 
-    line = 0
-    rule = Separator(150, 100, length=500)
-    dialogue = Message(100, 380, DIALOGUE[0],
-                       width=600,
-                       bg=(20, 20, 60),
-                       fg=(255, 255, 255),
-                       padding=16,
-                       font_size=28
-                       )
-
   def draw(self, screen):
-    if self.status == "inactive":
+    if self.status == "active":
       self.rect.topleft = (self.x, self.y)
       screen.blit(self.idleImage, self.rect.topleft)
     else:
       self.cycleAnimation(screen)
 
-  def update(self, keys, screen):
-    if keys[pg.K_e] or keys[pg.K_SPACE] == True:
-      self.status = "inactive"
-      dialogue.draw(screen)
-      pg.display.flip()
-    elif keys[pg.K_KP_ENTER]:
-      nextLine()
+  def update(self, keys):
+
+    for event in pg.event.get():
+      if (keys[pg.K_e] == True) and self.textRunning == False:
+        self.textRunning = True
+        self.status = "active"
+        runText()
+        pg.display.flip()
+      elif event.type == pg.K_RETURN and self.textCompleted and self.activeMessage < len(self.dialog):
+        self.activeMessage += 1
+        self.textRunning = True
+        self.textCompleted = False
+        self.dialog = self.dialog[self.activeMessage]
+        self.textCounter = 0
 
   def cycleAnimation(self, screen):
     self.rect.topleft = (self.x, self.y)
@@ -80,5 +92,19 @@ class Bartender(pg.sprite.Sprite):
 
     screen.blit(self.animatedImage, self.rect.topleft)
 
-  def printDebug(self):
-    print(f"Bartender status: {self.status}")
+  def printDebug(self, message):
+    print(message)
+
+bartenderObj = Bartender()
+
+def runText():
+  pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
+  if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialog):
+    bartenderObj.textCounter += 1
+
+  elif bartenderObj.textCounter >= bartenderObj.textSpeed * len(bartenderObj.dialog):
+    bartenderObj.textCompleted = True
+
+  bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
+  screen.blit(bartenderObj.snip, (10, 710))
+  pg.display.flip()
