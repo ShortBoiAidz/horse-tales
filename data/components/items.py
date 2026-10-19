@@ -1,4 +1,5 @@
 import pygame as pg
+from PygameTkinterGUITools import *
 
 class BlueCoin:
 	def __init__(self):

@@ -1,60 +1,110 @@
 import pygame as pg
 
 from data.components import sounds
+from data.states import mapstates
+from PygameTkinterGUITools import *
 
-import random
+screen = pg.display.set_mode([800, 800])
 
-class Prank:
+def nextLine():
+  global line
+
+  line = (line + 1) % len(bartenderObj.dialog)
+
+class Bartender(pg.sprite.Sprite):
   def __init__(self):
-    self.image = pg.image.load("assets/textures/characters/daniel_prank/idle.png")
-    self.x = 700 // 2
-    self.y = 500 // 2
+    global line, textRunning
+
+    super().__init__()
+    self.x = 360
+    self.y = 167
+
+    self.idleImage = pg.image.load("assets/textures/characters/bartender/idle.png")
+    self.idleImage = pg.transform.scale(self.idleImage, (72, 72))
+
+    pg.font.init()
+    self.font = pg.font.Font('freesansbold.ttf', 24)
+
+    self.textCounter = 0
+    self.textSpeed = 1
+    self.textCompleted = False
+    self.snip = self.font.render('', True, (255, 255, 255))
+
+    self.dialog = [
+                      "You seem down. Why the long face?",
+                      "Oh...you're upset? I'd hate to be you.",
+                      "My go-to solution is always resorting to alcohol. Fancy a beer?"
+                    ]
+    self.activeMessage = 0
+    self.dialog = self.dialog[self.activeMessage]
+
+    self.textRunning = False
+
+    self.status = "inactive"
+
+    self.sprites = []
+
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (1).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (2).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (3).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (4).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (5).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (6).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (7).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (8).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (9).png"))
+
+    self.current_sprite = 0
+
+    self.rect = self.idleImage.get_rect(center=(self.x, self.y))
 
   def draw(self, screen):
-    screen.blit(self.image, (self.x, self.y))
-    sounds.stopSounds()
-    sounds.danielPrankSound()
+    if self.status == "active":
+      self.rect.topleft = (self.x, self.y)
+      screen.blit(self.idleImage, self.rect.topleft)
+    else:
+      self.cycleAnimation(screen)
 
-class Rooster:
-  def __init__(self):
-    self.image = pg.image.load("assets/textures/characters/riley_rooster/idle.png")
-    self.x = 0
-    self.y = 0
+  def update(self, keys):
 
-class Smirk:
-  def __init__(self):
-    self.image = pg.image.load("assets/textures/characters/carleighe_smirk/idle.png")
-    self.image_shot = pg.image.load("assets/textures/characters/carleighe_smirk/shot.png")
-    self.x = 700 // 2
-    self.y = 500 // 2
+    for event in pg.event.get():
+      if (keys[pg.K_e] == True) and self.textRunning == False:
+        self.textRunning = True
+        self.status = "active"
+        runText()
+        pg.display.flip()
+      elif event.type == pg.K_RETURN and self.textCompleted and self.activeMessage < len(self.dialog):
+        self.activeMessage += 1
+        self.textRunning = True
+        self.textCompleted = False
+        self.dialog = self.dialog[self.activeMessage]
+        self.textCounter = 0
 
-  def draw(self, screen):
-    sounds.stopSounds()
-    sounds.newsSound()
-    screen.blit(self.image, (self.x, self.y))
+  def cycleAnimation(self, screen):
+    self.rect.topleft = (self.x, self.y)
+    self.current_sprite += 1
 
-  def draw_shot(self, screen):
-    sounds.stopSounds()
-    sounds.smirkShotSound()
-    screen.blit(self.image_shot, (self.x, self.y))
-    pg.time.delay(1000)
-    sounds.sadSound()
+    if self.current_sprite >= len(self.sprites):
+      self.current_sprite = 0
 
-  def dialog(screen):
-    font = pg.font.SysFont("Comic Sans MS", 20)
-    text_y = 530
-    text_x = 500
+    self.animatedImage = self.sprites[self.current_sprite]
+    self.animatedImage = pg.transform.scale(self.animatedImage, (72, 72))
 
-    voicelines = [
-      "Last night, there was a fire in the Bronx last night that killed people during the fire last night in the Bronx. They say they died due to the fire being too hot for their bodies. Bummer.",
-      "An unknown killer is loose in the town. For your own safety, stay inside and do not trust anyone.",
-      "My friend Bart says pasta isn't real. I told him that he's just thinking of 'Italian' people.",
-      "This is unrelated to any events, but I talked to my good friend Bart about his views on pineapples. He believes they aren't real. What an idiot.",
-      "Funny how pineapples are so unrelated to coffee."
-    ]
+    screen.blit(self.animatedImage, self.rect.topleft)
 
-    newsLabel = font.render(voicelines[random.randint(0, 4)], True, (255, 0, 0))
+  def printDebug(self, message):
+    print(message)
 
-    pg.draw.rect(screen, (255, 255, 255), (0, 500, 800, 100))
+bartenderObj = Bartender()
 
-    screen.blit(newsLabel, (text_x, text_y))
+def runText():
+  pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
+  if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialog):
+    bartenderObj.textCounter += 1
+
+  elif bartenderObj.textCounter >= bartenderObj.textSpeed * len(bartenderObj.dialog):
+    bartenderObj.textCompleted = True
+
+  bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
+  screen.blit(bartenderObj.snip, (10, 710))
+  pg.display.flip()

@@ -1,10 +1,11 @@
 import pygame as pg
+from PygameTkinterGUITools import *
 
 class Player(pg.sprite.Sprite):
   def __init__(self):
     super().__init__()
-    self.x = 500
-    self.y = 500
+    self.x = 160
+    self.y = 150
 
     self.sprites_left = []
     self.sprites_right = []
@@ -15,13 +16,12 @@ class Player(pg.sprite.Sprite):
 
     self.sprites_right.append(pg.image.load("assets/textures/characters/player/walk1_right.png"))
     self.sprites_right.append(pg.image.load("assets/textures/characters/player/walk2_right.png"))
-    #self.sprites_right.append(pg.image.load("assets/textures/characters/player/appa.png"))
 
     # Assigning images to sprites
     self.current_sprite = 0
     self.image = self.sprites_left[self.current_sprite]
     self.image = self.sprites_right[self.current_sprite]
-    self.image = pg.transform.scale(self.image, (128, 128))
+    self.image = pg.transform.scale(self.image, (72, 72))
     self.rect = self.image.get_rect(center=(self.x, self.y))
 
   def update(self, keys):
@@ -49,7 +49,7 @@ class Player(pg.sprite.Sprite):
     self.rect.topleft = (self.x, self.y)
     screen.blit(self.image, self.rect.topleft)
 
-  def draw_hitbox(self, screen):
+  def drawHitbox(self, screen):
     pg.draw.rect(screen, (255, 0, 0), self.rect, 2)
 
   def cycleSprites_left(self):
@@ -60,7 +60,7 @@ class Player(pg.sprite.Sprite):
       self.current_sprite = 0
 
     self.image = self.sprites_left[self.current_sprite]
-    self.image = pg.transform.scale(self.image, (128, 128))
+    self.image = pg.transform.scale(self.image, (72, 72))
 
   def cycleSprites_right(self):
     self.rect.topleft = (self.x, self.y)
@@ -70,7 +70,7 @@ class Player(pg.sprite.Sprite):
       self.current_sprite = 0
 
     self.image = self.sprites_right[self.current_sprite]
-    self.image = pg.transform.scale(self.image, (128, 128))
+    self.image = pg.transform.scale(self.image, (72, 72))
 
   def printDebug(self):
-    print(f"Player coords: {self.x}, {self.y}")
+    print(f"Player coords: ({self.x}, {self.y})")
