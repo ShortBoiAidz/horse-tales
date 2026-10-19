@@ -22,7 +22,7 @@ class Bar():
     zoom_camera = ZoomCamera(camera, (800, 800), zoom=1.5)
 
     world = World(bar, camera)
-    world.add_sprite(playerObj)
+    #world.add_sprite(playerObj)
 
   def update(self, tick):
     keys = pg.key.get_pressed()
