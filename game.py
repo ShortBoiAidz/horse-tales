@@ -70,9 +70,9 @@ def process_logic():
 	bartender.update(keys)
 
 def draw_game():
-	playerObject.draw(screen)
 	barMap.drawMap(screen)
 	bartender.draw(screen)
+	playerObject.draw(screen)
 
 	if HITBOX:
 		playerObject.drawHitbox(screen)
