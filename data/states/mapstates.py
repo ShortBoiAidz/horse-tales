@@ -27,15 +27,15 @@ class currentMap:
   def checkSounds(self):
     pass
 
-  def update(self, screen):
-    self.loadMap()
-    match self.mapstate:
-      case "bar":
-        bar.drawMap(screen)
-      case "cave":
-        pass
-      case "jungle":
-        pass
+  # def update(self, screen):
+  #   self.loadMap()
+  #   match self.mapstate:
+  #     case "bar":
+  #       bar.drawMap(screen)
+  #     case "cave":
+  #       pass
+  #     case "jungle":
+  #       pass
 
 class PrintDebug:
   def printDebug(self):

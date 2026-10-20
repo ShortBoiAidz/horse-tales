@@ -98,6 +98,7 @@ bartenderObj = Bartender()
 
 def runText():
   pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
+
   if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialog):
     bartenderObj.textCounter += 1
 

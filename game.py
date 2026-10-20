@@ -57,16 +57,10 @@ def init_pygame():
 
 	return screen, clock
 
-def handle_input():
-	for event in pg.event.get():
-		if event.type == pg.QUIT:
-			pg.quit()
-			sys.exit()
-
 def process_logic():
 	mapstatesDefineObjects.update()
 	playerObject.update(keys)
-	currentMap.update(screen)
+	#currentMap.update(screen)
 	bartenderObj.update(keys)
 
 def draw_game():
@@ -89,7 +83,6 @@ while True:
 
 	process_logic()
 	draw_game()
-	handle_input()
 
 	for event in pg.event.get():
 		if event.type == pg.QUIT:
