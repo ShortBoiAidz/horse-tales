@@ -13,7 +13,7 @@ def nextLine():
 
 class Bartender(pg.sprite.Sprite):
   def __init__(self):
-    global line, textRunning
+    global line
 
     super().__init__()
     self.x = 470
@@ -37,8 +37,6 @@ class Bartender(pg.sprite.Sprite):
                     ]
     self.activeMessage = 0
     self.dialog = self.dialog[self.activeMessage]
-
-    self.textRunning = False
 
     self.status = "inactive"
 
@@ -65,19 +63,8 @@ class Bartender(pg.sprite.Sprite):
     else:
       self.cycleAnimation(screen)
 
-  def update(self, keys):
-
-    if (keys[pg.K_e] == True) and self.textRunning == False:
-      self.textRunning = True
-      self.status = "active"
-      runText()
-      pg.display.flip()
-    #elif event.type == pg.K_RETURN and self.textCompleted and self.activeMessage < len(self.dialog):
-     # self.activeMessage += 1
-      #self.textRunning = True
-      # self.textCompleted = False
-      # self.dialog = self.dialog[self.activeMessage]
-      # self.textCounter = 0
+  def update(self):
+    pass
 
   def cycleAnimation(self, screen):
     self.rect.topleft = (self.x, self.y)
@@ -94,17 +81,26 @@ class Bartender(pg.sprite.Sprite):
   def printDebug(self, message):
     print(message)
 
+class BartenderDialog:
+  def __init__(self):
+    self.textRunning = False
+
+  def update(self, keys):
+
+    if (keys[pg.K_e] == True):
+      self.textRunning = True
+      self.status = "active"
+
+    if self.textRunning == True: # I hate this code.
+      pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
+      if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialog):
+        bartenderObj.textCounter += 1
+
+      elif (bartenderObj.textCounter >= bartenderObj.textSpeed * len(bartenderObj.dialog)):
+        bartenderObj.textCompleted = True
+
+    bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
+    screen.blit(bartenderObj.snip, (10, 710))
+
 bartenderObj = Bartender()
-
-def runText():
-  pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
-
-  if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialog):
-    bartenderObj.textCounter += 1
-
-  elif bartenderObj.textCounter >= bartenderObj.textSpeed * len(bartenderObj.dialog):
-    bartenderObj.textCompleted = True
-
-  bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
-  screen.blit(bartenderObj.snip, (10, 710))
-  pg.display.flip()
+bartenderDialogObj = BartenderDialog()

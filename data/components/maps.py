@@ -18,7 +18,7 @@ class Bar():
     body = TopDownBody(playerObj, solids=walls, speed=SPEED)
 
     camera = Camera(bar.width, bar.height, (800, 800))
-    camera.follow(player)
+    camera.follow(playerObj)
     zoom_camera = ZoomCamera(camera, (800, 800), zoom=1.5)
 
     world = World(bar, camera)

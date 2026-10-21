@@ -13,11 +13,9 @@
 # importing modules
 from data.states import cutscenes, mapstates, soundstates
 from data.components import items, sounds, player, characters, enemies, maps
-from PygameTkinterGUITools import *
 # importing pygame shit
 import pygame as pg
 import sys
-from pytmx.util_pygame import load_pygame as lpg
 
 WIDTH, HEIGHT = 800, 800
 GAME_NAME = "Horse Tale"
@@ -25,7 +23,7 @@ DEBUG = True
 HITBOX = False
 
 def init_pygame():
-	global clock, bartenderObj, playerObject, currentMap, printMapstateDebug, keys, mapSprites, mapstatesDefineObjects, soundstatesObject, bar, barMap
+	global clock, bartenderObj, playerObject, currentMap, printMapstateDebug, keys, bartenderDialogObj, mapstatesDefineObjects, soundstatesObject
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
 	clock = pg.time.Clock()
@@ -35,22 +33,17 @@ def init_pygame():
 	playerObject = player.Player()
 
 	# Map shit
-	mapSprites = pg.sprite.Group() # MAPSPRITES. THIS IS IMPORTANT. DO NOT MOVE.
-
 	mapstatesDefineObjects = mapstates.defineObjects()
 	currentMap = mapstates.currentMap()
 	printMapstateDebug = mapstates.PrintDebug()
 
 	# Objects and stuff
 	soundstatesObject = soundstates.checkSounds()
-	barMap = maps.Bar()
+	bartenderDialogObj = characters.bartenderDialogObj
 
 	# Sprite groups
 	movingSprites = pg.sprite.Group()
 	movingSprites.add(playerObject)
-
-	# More stuff
-	bar = lpg("assets/textures/mapsheets/bar.tmx")
 
 	pg.init()
 	pg.display.set_caption(GAME_NAME)
@@ -60,17 +53,16 @@ def init_pygame():
 def process_logic():
 	mapstatesDefineObjects.update()
 	playerObject.update(keys)
-	#currentMap.update(screen)
-	bartenderObj.update(keys)
+	currentMap.update(screen)
+	bartenderObj.update()
+	bartenderDialogObj.update(keys)
 
 def draw_game():
-	barMap.drawMap(screen)
-	bartenderObj.draw(screen)
 	playerObject.draw(screen)
+	bartenderObj.draw(screen)
 
 	if HITBOX:
 		playerObject.drawHitbox(screen)
-		currentMap.drawHitbox(screen)
 
 	pg.display.flip()
 
