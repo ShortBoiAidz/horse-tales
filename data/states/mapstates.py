@@ -36,4 +36,4 @@ class currentMap:
 
 class PrintDebug:
   def printDebug(self):
-    print(f"Mapstate: {currentMapObject.mapstate}")
+    print(f"Current Map: {currentMapObject.mapstate}")
