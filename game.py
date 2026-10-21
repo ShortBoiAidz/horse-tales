@@ -21,9 +21,10 @@ WIDTH, HEIGHT = 800, 800
 GAME_NAME = "Horse Tale"
 DEBUG = True
 HITBOX = False
+FPS = 20
 
 def init_pygame():
-	global clock, bartenderObj, playerObject, currentMap, printMapstateDebug, keys, bartenderDialogObj, mapstatesDefineObjects, soundstatesObject
+	global clock, bartenderObj, playerObject, currentMap, printMapstateDebug, keys, bartenderDialogObj, barObj, mapstatesDefineObjects, soundstatesObject
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
 	clock = pg.time.Clock()
@@ -40,6 +41,7 @@ def init_pygame():
 	# Objects and stuff
 	soundstatesObject = soundstates.checkSounds()
 	bartenderDialogObj = characters.bartenderDialogObj
+	barObj = maps.Bar()
 
 	# Sprite groups
 	movingSprites = pg.sprite.Group()
@@ -56,6 +58,7 @@ def process_logic():
 	currentMap.update(screen)
 	bartenderObj.update()
 	bartenderDialogObj.update(keys)
+	barObj.update(tick)
 
 def draw_game():
 	playerObject.draw(screen)
@@ -72,6 +75,7 @@ soundstatesObject.playSound()
 
 while True:
 	keys = pg.key.get_pressed()
+	tick = clock.tick(FPS)
 
 	process_logic()
 	draw_game()
@@ -87,5 +91,3 @@ while True:
 		playerObject.printDebug()
 		soundstatesObject.printDebug()
 		bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
-
-	clock.tick(20)
