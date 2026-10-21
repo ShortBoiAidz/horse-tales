@@ -88,4 +88,4 @@ while True:
 		soundstatesObject.printDebug()
 		bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
 
-	clock.tick(17)
+	clock.tick(20)
