@@ -86,10 +86,9 @@ class BartenderDialog:
     self.textRunning = False
 
   def update(self, keys):
-
     if (keys[pg.K_e] == True):
       self.textRunning = True
-      self.status = "active"
+      bartenderObj.status = "active"
 
     if self.textRunning == True: # I hate this code.
       pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
@@ -99,8 +98,11 @@ class BartenderDialog:
       elif (bartenderObj.textCounter >= bartenderObj.textSpeed * len(bartenderObj.dialog)):
         bartenderObj.textCompleted = True
 
-    bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
-    screen.blit(bartenderObj.snip, (10, 710))
+      bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
+      screen.blit(bartenderObj.snip, (10, 710))
+
+    if bartenderObj.textCompleted:
+      self.textRunning = False
 
 bartenderObj = Bartender()
 bartenderDialogObj = BartenderDialog()
