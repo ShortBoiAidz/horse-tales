@@ -91,18 +91,22 @@ class BartenderDialog:
       bartenderObj.status = "active"
 
     if self.textRunning == True: # I hate this code.
-      pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
-      if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialog):
-        bartenderObj.textCounter += 1
-
-      elif (bartenderObj.textCounter >= bartenderObj.textSpeed * len(bartenderObj.dialog)):
-        bartenderObj.textCompleted = True
-
-      bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
-      screen.blit(bartenderObj.snip, (10, 710))
-
-    if bartenderObj.textCompleted:
+      self.drawDialog()
+      
+    if bartenderObj.textCompleted and keys[pg.K_e] == True:
       self.textRunning = False
+
+  def drawDialog(self):
+    pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
+    
+    if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialog):
+      bartenderObj.textCounter += 1
+
+    elif (bartenderObj.textCounter >= bartenderObj.textSpeed * len(bartenderObj.dialog)):
+      bartenderObj.textCompleted = True
+
+    bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
+    screen.blit(bartenderObj.snip, (10, 710))
 
 bartenderObj = Bartender()
 bartenderDialogObj = BartenderDialog()
