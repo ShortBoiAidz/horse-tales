@@ -9,23 +9,25 @@ SPEED = 200
 
 class Bar():
   def __init__(self):
-    global world, camera, zoom_camera, playerObj, body, walls, bar
+    global world, camera, zoom_camera, playerObj, body, walls, bar, playerSprite
 
     playerObj = player.Player()
+    playerSprite = playerObj.playerSprite
 
     bar = TiledMap("assets/textures/mapsheets/bar.tmx")
     walls = [obj["rect"] for obj in bar.collision_objects]
-    body = TopDownBody(playerObj, solids=walls, speed=SPEED)
+    body = TopDownBody(playerSprite, solids=walls, speed=SPEED, hitbox=10)
+    body.hitbox_rect
 
     camera = Camera(bar.width, bar.height, (800, 800))
     zoom_camera = ZoomCamera(camera, (800, 800), zoom=1.5)
 
-    world = World(bar, camera)
-    #world.add_sprite(playerObj)
+    world = World(bar, camera, y_sort=False)
+    world.add_sprite(playerSprite)
 
   def update(self, tick):
     keys = pg.key.get_pressed()
-
+  
     ground = bar.tile_properties_at(body.hitbox_rect.center)
     speed = SPEED * ground.get("speed", 1)
 
@@ -34,10 +36,9 @@ class Bar():
 
     body.move(dx, dy, speed)
     body.update(tick)
-
     world.update(tick)
     camera.follow(playerObj)
-    zoom_camera.update(tick)
+    #zoom_camera.update(tick)
 
   def drawMap(self, screen):
     zoom_camera.draw_world(world, screen)

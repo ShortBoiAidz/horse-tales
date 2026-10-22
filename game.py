@@ -1,14 +1,14 @@
-# =====================
-# RULES FOR FORMATTING
-# =====================
-# 1) Keep spacing and tabs consistent (Tab Size: 2)
-# 2) DO NOT fuck with variables if you don't know what they do
-# 3) If something works, DO NOT FUCKING TOUCH IT
-# 4) Listen to other comments (e.g. labels)
-# 5) Keep names and shit consistent throughout all files
-# 6) DO NOT FUCKING NEST. NEVER NEST. WE HATE NESTERS. NO STUPID IF STATEMENTS INSIDE OTHER IF STATEMENTS. FIND A BETTER SOLUTION.
-# 7) Try to avoid repeating code. Call another function if you have to
-# 8) Try to keep camelCase and rarely use snake_case
+#* =====================
+#* RULES FOR FORMATTING
+#* =====================
+#* 1) Keep spacing and tabs consistent (Tab Size: 2)
+#* 2) DO NOT fuck with variables if you don't know what they do
+#* 3) If something works, DO NOT FUCKING TOUCH IT
+#* 4) Listen to other comments (e.g. labels)
+#* 5) Keep names and shit consistent throughout all files
+#* 6) DO NOT FUCKING NEST. NEVER NEST. WE HATE NESTERS. NO STUPID IF STATEMENTS INSIDE OTHER IF STATEMENTS. FIND A BETTER SOLUTION.
+#* 7) Try to avoid repeating code. Call another function if you have to
+#* 8) Try to keep camelCase and rarely use snake_case
 
 from data.states import cutscenes, mapstates, soundstates
 from data.components import items, sounds, player, characters, enemies, maps
@@ -23,14 +23,16 @@ HITBOX = False
 FPS = 20
 
 def init_pygame():
-	global clock, bartenderObj, playerObject, currentMap, printMapstateDebug, keys, bartenderDialogObj, barObj, mapstatesDefineObjects, soundstatesObject
+	global clock, bartenderObj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, bartenderDialogObj, barObj, mapstatesDefineObjects, soundstatesObject
 
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
 	clock = pg.time.Clock()
 
 	# Character objects
 	bartenderObj = characters.Bartender()
-	playerObject = player.Player()
+	playerObj = player.Player()
+	playerAnimator = playerObj.playerAnimator
+	playerSprite = playerObj.playerSprite
 
 	# Map shit
 	mapstatesDefineObjects = mapstates.defineObjects()
@@ -42,10 +44,6 @@ def init_pygame():
 	bartenderDialogObj = characters.bartenderDialogObj
 	barObj = maps.Bar()
 
-	# Sprite groups
-	movingSprites = pg.sprite.Group()
-	movingSprites.add(playerObject)
-
 	pg.init()
 	pg.display.set_caption(GAME_NAME)
 
@@ -55,7 +53,7 @@ def init_pygame():
 
 def process_logic():
 	mapstatesDefineObjects.update()
-	playerObject.update(keys)
+	playerObj.update(keys, tick)
 	currentMap.update(screen)
 	bartenderObj.update()
 	bartenderDialogObj.update(keys)
@@ -65,10 +63,8 @@ def process_logic():
 
 def draw_game():
 	bartenderObj.draw(screen)
-	playerObject.draw(screen)
-
-	if HITBOX:
-		playerObject.drawHitbox(screen)
+	playerSprite.draw(screen)
+	playerObj.drawAnimation(screen)
 
 	pg.display.flip()
 
@@ -93,6 +89,6 @@ while True:
 	if DEBUG:
 		print("========")
 		printMapstateDebug.printDebug()
-		playerObject.printDebug()
+		playerObj.printDebug()
 		soundstatesObject.printDebug()
 		bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
