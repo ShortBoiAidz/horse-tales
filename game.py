@@ -10,10 +10,9 @@
 # 7) Try to avoid repeating code. Call another function if you have to
 # 8) Try to keep camelCase and rarely use snake_case
 
-# importing modules
 from data.states import cutscenes, mapstates, soundstates
 from data.components import items, sounds, player, characters, enemies, maps
-# importing pygame shit
+
 import pygame as pg
 import sys
 
@@ -52,6 +51,8 @@ def init_pygame():
 
 	return screen, clock
 
+# ----------------------------------
+
 def process_logic():
 	mapstatesDefineObjects.update()
 	playerObject.update(keys)
@@ -60,9 +61,11 @@ def process_logic():
 	bartenderDialogObj.update(keys)
 	barObj.update(tick)
 
+# ----------------------------------
+
 def draw_game():
-	playerObject.draw(screen)
 	bartenderObj.draw(screen)
+	playerObject.draw(screen)
 
 	if HITBOX:
 		playerObject.drawHitbox(screen)
@@ -72,6 +75,8 @@ def draw_game():
 screen, clock = init_pygame()
 
 soundstatesObject.playSound()
+
+# ===============================
 
 while True:
 	keys = pg.key.get_pressed()

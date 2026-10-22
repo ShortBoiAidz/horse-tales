@@ -10,14 +10,12 @@ class Player(pg.sprite.Sprite):
     self.sprites_left = []
     self.sprites_right = []
 
-    # Appending images
     self.sprites_left.append(pg.image.load("assets/textures/characters/player/walk1_left.png"))
     self.sprites_left.append(pg.image.load("assets/textures/characters/player/walk2_left.png"))
 
     self.sprites_right.append(pg.image.load("assets/textures/characters/player/walk1_right.png"))
     self.sprites_right.append(pg.image.load("assets/textures/characters/player/walk2_right.png"))
 
-    # Assigning images to sprites
     self.current_sprite = 0
     self.image = self.sprites_left[self.current_sprite]
     self.image = self.sprites_right[self.current_sprite]
@@ -25,25 +23,41 @@ class Player(pg.sprite.Sprite):
     self.rect = self.image.get_rect(center=(self.x, self.y))
 
   def update(self, keys):
-    # LEFT movement
     if keys[pg.K_LEFT] or keys[pg.K_a] == True:
       self.x -= 10
       self.cycleSprites_left()
 
-    # RIGHT movement
     elif keys[pg.K_RIGHT] or keys[pg.K_d] == True:
       self.x += 10
       self.cycleSprites_right()
 
-    # UP movement
     elif keys[pg.K_UP] or keys[pg.K_w] == True:
       self.y -= 10
       self.cycleSprites_right()
 
-    # DOWN movement
     elif keys[pg.K_DOWN] or keys[pg.K_s] == True:
       self.y += 10
       self.cycleSprites_left()
+
+    elif keys[pg.K_DOWN] and keys[pg.K_LEFT] or keys[pg.K_s] and keys[pg.K_a] == True:
+      self.y += 5
+      self.x -= 5
+      self.cycleSprites_left
+ 
+    elif keys[pg.K_DOWN] and keys[pg.K_RIGHT] or keys[pg.K_s] and keys[pg.K_d] == True:
+      self.y += 5
+      self.x += 5
+      self.cycleSprites_right
+ 
+    elif keys[pg.K_UP] and keys[pg.K_LEFT] or keys[pg.K_w] and keys[pg.K_a] == True:
+      self.y -= 5
+      self.x -= 5
+      self.cycleSprites_left
+ 
+    elif keys[pg.K_UP] and keys[pg.K_RIGHT] or keys[pg.K_w] and keys[pg.K_d] == True:
+      self.y -= 5
+      self.x += 5
+      self.cycleSprites_right
 
   def draw(self, screen):
     self.rect.topleft = (self.x, self.y)

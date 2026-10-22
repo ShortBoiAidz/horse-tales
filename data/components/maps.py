@@ -18,7 +18,6 @@ class Bar():
     body = TopDownBody(playerObj, solids=walls, speed=SPEED)
 
     camera = Camera(bar.width, bar.height, (800, 800))
-    camera.follow(playerObj)
     zoom_camera = ZoomCamera(camera, (800, 800), zoom=1.5)
 
     world = World(bar, camera)
@@ -37,6 +36,7 @@ class Bar():
     body.update(tick)
 
     world.update(tick)
+    camera.follow(playerObj)
     zoom_camera.update(tick)
 
   def drawMap(self, screen):
@@ -46,3 +46,4 @@ class Bar():
       body.draw_debug(screen, zoom_camera)
       for wall in walls:
         pg.draw.rect(screen, (255, 0, 0), zoom_camera.apply(wall), 1)
+# ----------------------------------
