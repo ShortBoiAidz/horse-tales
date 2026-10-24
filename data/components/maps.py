@@ -9,7 +9,7 @@ SPEED = 200
 
 class Bar():
   def __init__(self):
-    global world, camera, zoom_camera, playerObj, body, walls, bar, playerSprite
+    global world, camera, zoom_camera, playerObj, body, walls, bar, playerSprite, ground, speed
 
     playerObj = player.Player()
     playerSprite = playerObj.playerSprite
@@ -25,12 +25,10 @@ class Bar():
     world = World(bar, camera, y_sort=False)
     world.add_sprite(playerSprite)
 
-  def update(self, tick):
-    keys = pg.key.get_pressed()
-  
     ground = bar.tile_properties_at(body.hitbox_rect.center)
     speed = SPEED * ground.get("speed", 1)
 
+  def update(self, tick, keys):
     dx = keys[pg.K_RIGHT] - keys[pg.K_LEFT]
     dy = keys[pg.K_DOWN] - keys[pg.K_UP]
 
@@ -38,7 +36,7 @@ class Bar():
     body.update(tick)
     world.update(tick)
     camera.follow(playerObj)
-    #zoom_camera.update(tick)
+    #// zoom_camera.update(tick)
 
   def drawMap(self, screen):
     zoom_camera.draw_world(world, screen)

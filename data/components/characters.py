@@ -13,7 +13,7 @@ def nextLine():
   line = (line + 1) % len(bartenderObj.dialog)
 
 class Bartender(pg.sprite.Sprite):
-  #^ His name is Gek
+  #note^ His name is Gek
   def __init__(self):
     global line
 
@@ -37,9 +37,9 @@ class Bartender(pg.sprite.Sprite):
                     "Oh...you're upset? Bummer.",
                     "Fortunately for me, I'm doing better than you.",
                     "My go-to solution is always resorting to alcohol. Fancy a beer?"
-                  ] # ^ Feel free to edit
+                  ] #note^ Feel free to edit
     
-    self.randomDialog = [ #TODO: Add more random dialog
+    self.randomDialog = [
                           "My wife left me twice. She's in a wheelchair now.",
                           "Kinda sucks how alcohol poisons you. My ex wife found that out the hard way.",
                           "You know, it's really not ideal how all of my customers are \"under the legal age to drink.\" I just think the police are trying to clear everyone out so their orders get priority.",
@@ -47,12 +47,12 @@ class Bartender(pg.sprite.Sprite):
                           "A mime taught me how to make a joke. I couldn't tell you how funny it was.",
                           "My neighbours knocked on my door at 2 in the morning. 2 in the FRICKIN' morning. Thankfully I was up playing my bagpipes.",
                           "Met this lad named Daniel. He came into my bar without any pants. Then he told me he was lower class and it all made sense... quite the jokester, that one."
-                        ]
+                        ] #note^ feel free to edit
     
     #TODO: Make a randomised function for the "random dialog" so the random dialog text plays AFTER the normal dialog happens
 
     self.activeMessage = 0
-    self.activeRandomMessage = random.randint(0, 6) #* MAKE SURE TO UPDATE THIS IF YOU ADD MORE TEXT FOR randomDialog
+    self.activeRandomMessage = random.randint(0, 6) #%important MAKE SURE TO UPDATE THIS IF YOU ADD MORE TEXT FOR randomDialog
 
     self.dialog = self.dialog[self.activeMessage]
     self.randomDialog = self.randomDialog[self.activeRandomMessage]

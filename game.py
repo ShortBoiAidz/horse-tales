@@ -1,3 +1,4 @@
+
 #* =====================
 #* RULES FOR FORMATTING
 #* =====================
@@ -28,18 +29,18 @@ def init_pygame():
 	screen = pg.display.set_mode((WIDTH, HEIGHT))
 	clock = pg.time.Clock()
 
-	# Character objects
+	#& Character objects
 	bartenderObj = characters.Bartender()
 	playerObj = player.Player()
 	playerAnimator = playerObj.playerAnimator
 	playerSprite = playerObj.playerSprite
 
-	# Map shit
+	#& Map shit
 	mapstatesDefineObjects = mapstates.defineObjects()
 	currentMap = mapstates.currentMap()
 	printMapstateDebug = mapstates.PrintDebug()
 
-	# Objects and stuff
+	#& Objects and stuff
 	soundstatesObject = soundstates.checkSounds()
 	bartenderDialogObj = characters.bartenderDialogObj
 	barObj = maps.Bar()
@@ -57,14 +58,14 @@ def process_logic():
 	currentMap.update(screen)
 	bartenderObj.update()
 	bartenderDialogObj.update(keys)
-	barObj.update(tick)
+	barObj.update(tick, keys)
 
 # ----------------------------------
 
 def draw_game():
 	bartenderObj.draw(screen)
 	playerSprite.draw(screen)
-	playerObj.drawAnimation(screen)
+	playerObj.drawAnimation(screen, tick)
 
 	pg.display.flip()
 

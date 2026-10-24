@@ -22,6 +22,10 @@ class Player(pg.sprite.Sprite):
     self.facingLeft = False
 
   def update(self, keys, tick):
+    """
+    Updates player movements
+    """
+
     global moving, animatedPlayerImage
 
     moving = False
@@ -66,8 +70,6 @@ class Player(pg.sprite.Sprite):
       self.x += self.speed // 3
       self.cycleSprites()
 
-    animatedPlayerImage = self.playerAnimator.update(tick, flip_x=self.facingLeft)
-
   def draw(self, screen):
     self.playerAnimator.draw(screen)
 
@@ -75,14 +77,24 @@ class Player(pg.sprite.Sprite):
     pg.draw.rect(screen, (255, 0, 0), self.rect, 2)
 
   def cycleSprites(self):
-    if not self.playerAnimator.busy:
+    """
+    Cycles through animations
+    """
+    if not self.playerAnimator.busy: #%important FIX THIS FUCKING CODE
         if moving:
             self.playerAnimator.play("walk")
         else:
             self.playerAnimator.play("idle")
 
-  def drawAnimation(self, screen):
-    screen.blit(animatedPlayerImage, animatedPlayerImage.get_rect(midbottom=(self.x, 455)))
+  def drawAnimation(self, screen, tick):
+    """Renders animations onto the screen
+
+      Args:
+        screen (string): Main game screen
+        tick (int): Frame rate
+    """
+    animatedPlayerImage = self.playerAnimator.update(tick, flip_x=self.facingLeft) #!bug Issue here?
+    screen.blit(animatedPlayerImage, animatedPlayerImage.get_rect(midbottom=(self.x, 455))) #!bug Here too i think?
 
   def printDebug(self):
     print(f"Player coords: ({self.x}, {self.y})")
