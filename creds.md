@@ -2,7 +2,7 @@
 <br>
 <ul>
   <li><b>Organisation:</b> Barhorse Development</li>
-  <li><b>Manager:</b> Taj Pattison</li>
+  <li><b>Lead Visuals Designer:</b> Taj Pattison</li>
   <li><b>Lead Technical Developer:</b> Aiden Thorpe</li>
   <li><b>Lead Sound Designer:</b> Ali Tanrikulu</li>
   <hr>
