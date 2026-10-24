@@ -53,7 +53,7 @@ def init_pygame():
 #& ----------------------------------
 
 def process_logic():
-	"""Runs on the _while_ loop. Runs _update()_ functions for objects.
+	"""Runs _update()_ functions for objects.
 	"""
 	mapstatesDefineObjects.update()
 	playerObj.update(keys, tick)
