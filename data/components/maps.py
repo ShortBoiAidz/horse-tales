@@ -29,6 +29,12 @@ class Bar():
     speed = SPEED * ground.get("speed", 1)
 
   def update(self, tick, keys):
+    """Updates the player on the _Bar_ map
+
+    Args:
+        tick (integer): Tick rate of pygame's _Clock()_ (FPS)
+        keys (bool): Returns a boolean if a detected key is pressed
+    """
     dx = keys[pg.K_RIGHT] - keys[pg.K_LEFT]
     dy = keys[pg.K_DOWN] - keys[pg.K_UP]
 
@@ -45,4 +51,4 @@ class Bar():
       body.draw_debug(screen, zoom_camera)
       for wall in walls:
         pg.draw.rect(screen, (255, 0, 0), zoom_camera.apply(wall), 1)
-# ----------------------------------
+#& ----------------------------------

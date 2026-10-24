@@ -4,8 +4,15 @@ from PygameTkinterGUITools import *
 class Player(pg.sprite.Sprite):
   def __init__(self):
     super().__init__()
-    
-    self.playerAnimator = Animator("assets/textures/characters/player/spritesheet.png", from_sheet=True, tile_width=20, tile_height=21, rows=1, cols=5, scale=2)
+
+    self.playerAnimator = Animator(
+                                  "assets/textures/characters/player/spritesheet.png",
+                                   from_sheet=True,
+                                   tile_width=20,
+                                   tile_height=21,
+                                   rows=1, cols=5,
+                                   scale=2
+                                   )
 
     self.playerAnimator.add_animation("idle", [(2, 3)])
     self.playerAnimator.add_animation("walk", [(2, 4), (2, 5)])
@@ -22,8 +29,11 @@ class Player(pg.sprite.Sprite):
     self.facingLeft = False
 
   def update(self, keys, tick):
-    """
-    Updates player movements
+    """Updates the player movement
+
+    Args:
+        keys (bool): Returns a boolean if a detected key is pressed
+        tick (integer): Tick rate of pygame's _Clock()_ (FPS)
     """
 
     global moving, animatedPlayerImage
@@ -77,10 +87,7 @@ class Player(pg.sprite.Sprite):
     pg.draw.rect(screen, (255, 0, 0), self.rect, 2)
 
   def cycleSprites(self):
-    """
-    Cycles through animations
-    """
-    if not self.playerAnimator.busy: #%important FIX THIS FUCKING CODE
+    if not self.playerAnimator.busy: #%important FIX THIS FUCKING NESTING
         if moving:
             self.playerAnimator.play("walk")
         else:
@@ -90,11 +97,11 @@ class Player(pg.sprite.Sprite):
     """Renders animations onto the screen
 
       Args:
-        screen (string): Main game screen
-        tick (int): Frame rate
+        keys (bool): Returns a boolean if a detected key is pressed
+        tick (integer): Tick rate of pygame's _Clock()_ (FPS)
     """
-    animatedPlayerImage = self.playerAnimator.update(tick, flip_x=self.facingLeft) #!bug Issue here?
-    screen.blit(animatedPlayerImage, animatedPlayerImage.get_rect(midbottom=(self.x, 455))) #!bug Here too i think?
+    animatedPlayerImage = self.playerAnimator.update(tick, flip_x=self.facingLeft) #!bug "list index out of range" ??
+    screen.blit(animatedPlayerImage, animatedPlayerImage.get_rect(midbottom=(self.x, 455))) #!bug likely fucking up things here, too
 
   def printDebug(self):
     print(f"Player coords: ({self.x}, {self.y})")
