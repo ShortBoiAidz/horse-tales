@@ -10,6 +10,8 @@ minigame_theme = pg.mixer.Sound("assets/sounds/music/themes/minigame.mp3")
 news = pg.mixer.Sound("assets/sounds/music/themes/news.mp3")
 bar = pg.mixer.Sound("assets/sounds/music/themes/long_face.wav")
 
+#& ----------------------------------
+
 def stopSounds():
   pg.mixer.stop()
 

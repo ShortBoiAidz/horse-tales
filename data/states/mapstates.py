@@ -6,10 +6,8 @@ from PygameTkinterGUITools import *
 from pytmx.util_pygame import load_pygame as lpg
 
 class defineObjects():
-  def __init__(self):
-    pass
-
-  def update(self):
+  @staticmethod
+  def update():
     global currentMapObject, playerObject, soundstatesObject, bar
 
     currentMapObject = currentMap()
@@ -22,9 +20,6 @@ class currentMap:
   def __init__(self):
     self.mapstate = "bar"
 
-  def checkSounds(self):
-    pass
-
   def update(self, screen):
     match self.mapstate:
       case "bar":
@@ -35,5 +30,6 @@ class currentMap:
         pass
 
 class PrintDebug:
-  def printDebug(self):
+  @staticmethod
+  def printDebug():
     print(f"Current Map: {currentMapObject.mapstate}")
