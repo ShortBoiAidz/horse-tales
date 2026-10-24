@@ -2,7 +2,7 @@
 #* =====================
 #* RULES FOR FORMATTING
 #* =====================
-#* 1) Keep spacing and tabs consistent (Tab Size: 2)
+#* 1) Keep spacing and tabs consistent (Tab Size / Spaces: 2)
 #* 2) DO NOT fuck with variables if you don't know what they do
 #* 3) If something works, DO NOT FUCKING TOUCH IT
 #* 4) Listen to other comments (e.g. labels)
