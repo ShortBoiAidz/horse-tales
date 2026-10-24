@@ -12,4 +12,5 @@
   <li><b>Animator:</b> Aiden Thorpe</li>
   <li><b>Backend Programmers:</b> Adam Fox, Aiden Thorpe</li>
   <li><b>Frontend Programmers:</b> Taj Pattison, Aiden Thorpe</li>
+  <li><b>Slave:</b> Dayvidde "Liam" Heighnes</li>
 </ul>
