@@ -9,8 +9,9 @@
 #* 5) Keep names and shit consistent throughout all files
 #%important 6) DO NOT FUCKING NEST. NEVER NEST. WE HATE NESTERS. NO STUPID if STATEMENTS INSIDE OTHER if STATEMENTS. FIND A BETTER SOLUTION.
 #* 7) Try to avoid repeating code. Call another function if you have to
-#* 8) Try to keep camelCase and rarely use snake_case
-#* 9) If a created function has more than 1 param (or is complex), use a docstring to explain the function
+#* 8) If a created function has more than 1 param (or is complex), use a docstring to explain the function
+#* 9) Try to keep camelCase and rarely use snake_case
+#* 10) Idealy use camelSnake_case for components (i.e. spritesheets, mapsheets, etc)
 
 #& ----------------------------------
 

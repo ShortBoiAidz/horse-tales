@@ -62,6 +62,7 @@ class Bartender(pg.sprite.Sprite):
 
     self.sprites = []
 
+    #~path I would love to change these to camelSnake_case
     self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (1).png"))
     self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (2).png"))
     self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (3).png"))
