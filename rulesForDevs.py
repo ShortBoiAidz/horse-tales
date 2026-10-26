@@ -7,7 +7,7 @@
 #* 3) If something works, DO NOT FUCKING TOUCH IT
 #* 4) Listen to other comments (e.g. labels)
 #* 5) Keep names and shit consistent throughout all files
-#%important 6) DO NOT FUCKING NEST. NEVER NEST. WE HATE NESTERS. NO STUPID IF STATEMENTS INSIDE OTHER IF STATEMENTS. FIND A BETTER SOLUTION.
+#%important 6) DO NOT FUCKING NEST. NEVER NEST. WE HATE NESTERS. NO STUPID if STATEMENTS INSIDE OTHER if STATEMENTS. FIND A BETTER SOLUTION.
 #* 7) Try to avoid repeating code. Call another function if you have to
 #* 8) Try to keep camelCase and rarely use snake_case
 #* 9) If a created function has more than 1 param (or is complex), use a docstring to explain the function
