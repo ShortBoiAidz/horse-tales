@@ -68,7 +68,6 @@ def draw_game():
 	"""Renders the game.
 	"""
 	bartenderObj.draw(screen)
-	playerSprite.draw(screen)
 	playerObj.drawAnimation(screen, tick)
 
 	pg.display.flip()

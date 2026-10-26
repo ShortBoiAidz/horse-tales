@@ -52,8 +52,8 @@ class Bartender(pg.sprite.Sprite):
     #TODO: Make a randomised function for the "random dialog" so the random dialog text plays AFTER the normal dialog happens
 
     self.activeMessage = 0
-    self.activeRandomMessage = random.randint(0, 7)
-    #note^ MAKE SURE TO UPDATE THIS IF YOU ADD MORE DIALOG
+    self.activeRandomMessage = random.randint(0, 6)
+    #note^ MAKE SURE TO UPDATE THIS IF YOU ADD MORE DIALOG Issue 1: Put 0-7 but only 0-6
 
     self.dialog = self.dialog[self.activeMessage]
     self.randomDialog = self.randomDialog[self.activeRandomMessage]
