@@ -40,7 +40,7 @@ class Bar():
 
     body.move(dx, dy, speed)
     body.update(tick)
-    world.update(tick)
+    #//world.update(tick)
     camera.follow(playerObj)
     #// zoom_camera.update(tick)
 

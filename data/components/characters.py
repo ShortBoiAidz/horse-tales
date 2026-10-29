@@ -52,8 +52,8 @@ class Bartender(pg.sprite.Sprite):
     #TODO: Make a randomised function for the "random dialog" so the random dialog text plays AFTER the normal dialog happens
 
     self.activeMessage = 0
-    self.activeRandomMessage = random.randint(0, 7)
-    #note^ MAKE SURE TO UPDATE THIS IF YOU ADD MORE DIALOG
+    self.activeRandomMessage = random.randint(0, 6)
+    #note^ MAKE SURE TO UPDATE THIS IF YOU ADD MORE DIALOG Issue 1: Put 0-7 but only 0-6
 
     self.dialog = self.dialog[self.activeMessage]
     self.randomDialog = self.randomDialog[self.activeRandomMessage]
@@ -62,6 +62,7 @@ class Bartender(pg.sprite.Sprite):
 
     self.sprites = []
 
+    #~path I would love to change these to camelSnake_case
     self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (1).png"))
     self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (2).png"))
     self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (3).png"))

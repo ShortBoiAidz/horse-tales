@@ -9,15 +9,15 @@ class Player(pg.sprite.Sprite):
                                   "assets/textures/characters/player/spritesheet.png",
                                    from_sheet=True,
                                    tile_width=20,
-                                   tile_height=21,
-                                   rows=1, cols=5,
-                                   scale=2
+                                   tile_height=42,
+                                   rows=1, cols=4,
+                                   scale=1
                                    )
 
-    self.playerAnimator.add_animation("idle", [(2, 3)])
-    self.playerAnimator.add_animation("walk", [(2, 4), (2, 5)])
+    self.playerAnimator.add_animation("idle", [(0, 4)])
+    self.playerAnimator.add_animation("walk", [(0, 3), (0, 4)])
 
-    self.playerSprite = SpriteObject(100, 100, image="assets/textures/characters/player/idle.png")
+    self.playerSprite = SpriteObject(100, 100, animator=self.playerAnimator)
     self.playerSprite.move(20, 0)
 
     self.x = 250
@@ -87,7 +87,7 @@ class Player(pg.sprite.Sprite):
     pg.draw.rect(screen, (255, 0, 0), self.rect, 2)
 
   def cycleSprites(self):
-    if not self.playerAnimator.busy: #%important FIX THIS FUCKING NESTING
+    #if not self.playerAnimator.busy: #%important FIX THIS FUCKING NESTING
         if moving:
             self.playerAnimator.play("walk")
         else:
@@ -100,8 +100,8 @@ class Player(pg.sprite.Sprite):
         keys (bool): Returns a boolean if a detected key is pressed
         tick (integer): Tick rate of pygame's _Clock()_ (FPS)
     """
-    animatedPlayerImage = self.playerAnimator.update(tick, flip_x=self.facingLeft) #!bug "list index out of range" ??
-    screen.blit(animatedPlayerImage, animatedPlayerImage.get_rect(midbottom=(self.x, 455))) #!bug likely fucking up things here, too
+    # animatedPlayerImage = self.playerSprite.update(tick) #!bug "list index out of range" ??
+    # screen.blit(animatedPlayerImage, animatedPlayerImage.get_rect(midbottom=(self.x, 455))) #!bug likely fucking up things here, too
 
   def printDebug(self):
     print(f"Player coords: ({self.x}, {self.y})")
