@@ -5,17 +5,10 @@
 - <a href="#characters">Characters
 
 ## Storyline
-**// Cutscene starts<br>**
-Starts in a wood hut<br>
-Tired of living in a hut so Horse moves to town<br>
-Town has news reporter (Smirk)<br>
-Horse falls in love with Smirk<br>
-Smirk doesn't know Horse exists<br>
-Horse tries to find Smirk<br>
 Horse walks into bar<br>
-Horse says "I can't find Smirk"<br>
-Bartender thinks it's funny to play prank on Horse<br>
-Bartender tells Horse she's in a cave<br>
+Bartender asks "Why the long face?"<br>
+Horse says he is looking for his Zebra friend<br>
+Bartender says that she might be in a cave<br>
 
 **// Cutscene ends<br>
 // Game starts<br>
@@ -23,24 +16,21 @@ Bartender tells Horse she's in a cave<br>
 
 Horse goes to cave<br>
 Horse finds village in cave<br>
-Horse finds temple in village<br>
-Horse has to complete puzzles to go through temple<br>
+Horse has to complete puzzles to go through the village<br>
 Daniel Prank appears<br>
 Horse gets annoyed at Prank<br>
 Prank says he can help<br>
 Horse accepts<br>
 Prank helps after Horse competes in minigames<br>
 Horse completes temple<br>
-Horse finds bartender at the end of temple<br>
+Horse finds bartender at the end of village<br>
 
 **// Cutscene starts<br>**
 Bartender says "just joking, lad. Dunno where she is"<br>
 Horse sad<br>
 Horse goes back home<br>
-Horse turns on news<br>
-Smirk gets shot on live TV<br>
+Horse gets a random spike of lonliness<br>
 Horse gets sad<br>
-Horse gets angry at Bartender because Smirk wouldn't have died if Horse was there<br>
 Horse walks into bar<br>
 Bartender asks "why the long face?"<br>
 Horse pulls a gun on the bartender<br>
@@ -50,8 +40,7 @@ Horse pulls a gun on the bartender<br>
 ### The Horse
 
 **Backstory:**<br>
-The Horse is the player. Nameless, but just goes by "Horse". Horse has always lived in his hut in the middle of nowhere, but eventually got really bored and tired, so he ventures to the town. He moves into his new home and starts watching the news. Horse is stunned by the looks of 
-the news reporter Carleighe Smirk so he sets out to find her. He walks into a bar and asks the bartender where she might be. Then the game starts...
+The Horse is the player. Nameless, but just goes by "Horse". Horse has always lived in his hut in the middle of nowhere, but eventually got really bored and tired, so he ventures to the town. When strolling around, he feels quite lonely so he walks into a bar and the bartender asks "why the long face?"
 
 <br>**Personality:**<br>
 Horse's personality can be described as patient and determined. His logic-based skills improve over time, with the expense of his patiency deteriorating as well.
@@ -61,21 +50,10 @@ Horse's personality can be described as patient and determined. His logic-based 
 ### The Bartender
 
 **Backstory:**<br>
-There isn't much known about the Bartender's backstory. Although post-story, it's known that he falls into a deep depression after realising that the "prank" he pulled on Horse indirectly lead to the death of his good friend Carleighe Smirk.
+There isn't much known about the Bartender's backstory. Although post-story, it's known that he falls into a deep depression after his boyfriend Daniel Prank broke up with him.
 
 <br>**Personality:**<br>
 The Bartender is shown as a highly immature, self-centred (in a passive-aggressive way) prankster with no sense of consequences.
-
-<hr>
-
-### Carleighe Smirk
-
-**Backstory:**<br>
-Carleighe Smirk was a news reporter who reported on every event in the town—minor or major. Smirk was really good friends with the Bartender but never knew of Horse's existence. Because of the Bartender telling Horse that Smirk was elsewhere, there was no one around to stop the unknown
-entity from shooting Smirk in the neck, leading to her death on live TV.
-
-<br>**Personality:**<br>
-Smirk shows lots of passion and professionalism in her career of news reporting, although the company _Adam Fox News_ forces her to use corporate-style puns in her reports to appeal to younger audiences.
 
 <hr>
 
