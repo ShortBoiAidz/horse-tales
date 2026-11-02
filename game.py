@@ -4,7 +4,7 @@
 
 
 from data.states import cutscenes, mapstates, soundstates
-from data.components import items, sounds, player, characters, enemies, maps
+from data.components import items, sounds, characters, enemies, maps
 
 
 import pygame as pg
@@ -17,8 +17,8 @@ import sys
 WIDTH, HEIGHT = 800, 800
 GAME_NAME = "Horse Tale"
 DEBUG = True
-HITBOX = False
-FPS = 20
+HITBOX = True
+FPS = 30
 
 
 #& ----------------------------------
@@ -40,9 +40,6 @@ def init_pygame():
 
 
   bartenderObj = characters.Bartender()
-  playerObj = player.Player()
-  playerAnimator = playerObj.playerAnimator
-  playerSprite = playerObj.playerSprite
   #note^ Character objects
 
 
@@ -54,8 +51,12 @@ def init_pygame():
 
   soundstatesObject = soundstates.checkSounds()
   bartenderDialogObj = characters.bartenderDialogObj
-  barObj = maps.Bar()
   mapstatesDefineObjects.update()
+  barObj = mapstates.bar
+  barObj.add_sprite(bartenderObj)
+  playerObj = maps.playerObj
+  playerAnimator = playerObj.playerAnimator
+  playerSprite = playerObj.playerSprite
   #note^ Objects and stuff
 
 
@@ -72,11 +73,10 @@ def init_pygame():
 def process_logic():
   """Runs _update()_ functions for objects.
   """
-  playerObj.update(keys, tick)
+  barObj.update(tick, keys)
   currentMap.update(screen)
   bartenderObj.update()
   bartenderDialogObj.update(keys)
-  barObj.update(tick, keys)
 
 
 #& ----------------------------------
@@ -85,9 +85,6 @@ def process_logic():
 def draw_game():
   """Renders the game.
   """
-  bartenderObj.draw(screen)
-
-
   pg.display.flip()
 
 

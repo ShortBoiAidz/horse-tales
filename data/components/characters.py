@@ -24,12 +24,12 @@ class Bartender(pg.sprite.Sprite):
 
 
     super().__init__()
-    self.x = 470
-    self.y = 265
+    self.x = 310
+    self.y = 170
 
 
     self.idleImage = pg.image.load("assets/textures/characters/bartender/idle.png")
-    self.idleImage = pg.transform.scale(self.idleImage, (96, 96))
+    self.idleImage = pg.transform.scale(self.idleImage, (72, 72))
 
 
     pg.font.init()
@@ -63,8 +63,7 @@ class Bartender(pg.sprite.Sprite):
 
 
     self.activeMessage = 0
-    self.activeRandomMessage = random.randint(0, 6)
-    #note^ MAKE SURE TO UPDATE THIS IF YOU ADD MORE DIALOG Issue 1: Put 0-7 but only 0-6
+    self.activeRandomMessage = random.randint(0, len(self.randomDialog) - 1)
 
 
     self.dialog = self.dialog[self.activeMessage]
@@ -94,19 +93,18 @@ class Bartender(pg.sprite.Sprite):
     self.current_sprite = 0
 
 
-    self.rect = self.idleImage.get_rect(center=(self.x, self.y))
+    self.rect = self.idleImage.get_rect(topleft=(self.x, self.y))
 
 
-  def draw(self, screen):
+  def draw(self, screen, camera=None):
     if self.status == "active":
-      self.rect.topleft = (self.x, self.y)
-      screen.blit(self.idleImage, self.rect.topleft)
+      rect = camera.apply(self.rect) if camera else self.rect
+      screen.blit(self.idleImage, rect)
     else:
-      self.cycleAnimation(screen)
+      self.cycleAnimation(screen, camera)
 
 
-  def cycleAnimation(self, screen):
-    self.rect.topleft = (self.x, self.y)
+  def cycleAnimation(self, screen, camera=None):
     self.current_sprite += 1
 
 
@@ -115,10 +113,10 @@ class Bartender(pg.sprite.Sprite):
 
 
     self.animatedImage = self.sprites[self.current_sprite]
-    self.animatedImage = pg.transform.scale(self.animatedImage, (96, 96))
+    self.animatedImage = pg.transform.scale(self.animatedImage, (72, 72))
 
-
-    screen.blit(self.animatedImage, self.rect.topleft)
+    rect = camera.apply(self.rect) if camera else self.rect
+    screen.blit(self.animatedImage, rect)
 
 
   def printDebug(self, message):
@@ -140,6 +138,8 @@ class BartenderDialog:
       self.drawDialog()
      
     if bartenderObj.textCompleted and keys[pg.K_e] == True:
+      bartenderObj.activeMessage += 1
+      self.drawDialog()
       self.textRunning = False
 
 
@@ -148,6 +148,7 @@ class BartenderDialog:
    
     if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialog):
       bartenderObj.textCounter += 1
+      sounds.SFXSound("bartender_voice").play()
 
 
     elif (bartenderObj.textCounter >= bartenderObj.textSpeed * len(bartenderObj.dialog)):

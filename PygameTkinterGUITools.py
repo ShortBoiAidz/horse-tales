@@ -10565,6 +10565,7 @@ class TopDownBody(Body):
                                    as the sprite
                   (16, 8)        - a feet strip 16 wide and 8 tall, centred
                                    along the bottom of the sprite
+        hitbox_offset - move the feet hitbox from its default position
 
     Example:
         body = TopDownBody(player, solids=walls, speed=200)
@@ -10584,12 +10585,20 @@ class TopDownBody(Body):
         and body.draw_debug(screen, camera) draws it (F1).
     """
 
-    def __init__(self, sprite, solids=None, speed=200, normalize_diagonal=True, hitbox=None):
+    def __init__(self, sprite, solids=None, speed=200, normalize_diagonal=True,
+                 hitbox=None, hitbox_offset=(0, 0)):
         super().__init__(sprite, solids, speed)
         self.hitbox = hitbox
+        self.hitbox_offset = pg.Vector2(hitbox_offset)
         self.normalize_diagonal = normalize_diagonal
         self._direction = pg.Vector2(0, 0)
         self._speed_now = speed
+
+    def _collision_box(self):
+        box = super()._collision_box()
+        if self.hitbox is not None:
+            box.move_ip(self.hitbox_offset)
+        return box
 
     def move(self, dx, dy=0, speed=None):
         """Set the direction to move this frame (-1, 0 or 1 for each)."""

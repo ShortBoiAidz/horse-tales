@@ -7,7 +7,7 @@ from data.states import mapstates
 from data.components import player
 
 
-SPEED = 200
+SPEED = 100
 
 
 class Bar():
@@ -21,12 +21,38 @@ class Bar():
 
     bar = TiledMap("assets/textures/mapsheets/bar.tmx")
     walls = [obj["rect"] for obj in bar.collision_objects]
-    body = TopDownBody(playerSprite, solids=walls, speed=SPEED, hitbox=10)
+
+    for layer in bar.tmx.layers:
+      if getattr(layer, "class", "").lower() != "collision":
+        continue
+
+      walls.extend(
+        pg.Rect(
+          x * bar.tilewidth,
+          y * bar.tileheight,
+          bar.tilewidth,
+          bar.tileheight,
+        )
+
+        for y, row in enumerate(layer.data)
+        for x, gid in enumerate(row)
+        if gid
+      )
+
+    body = TopDownBody(
+      playerSprite,
+      solids=walls,
+      speed=SPEED,
+      hitbox=(12, 10),
+      hitbox_offset=(0, -2),
+    )
     body.hitbox_rect
 
 
     camera = Camera(bar.width, bar.height, (800, 800))
     zoom_camera = ZoomCamera(camera, (800, 800), zoom=1.5)
+    camera.follow(playerSprite)
+    zoom_camera.snap()
 
 
     world = World(bar, camera, y_sort=False)
@@ -50,9 +76,19 @@ class Bar():
 
 
     body.move(dx, dy, speed)
+    body.update(tick)
+    map_bounds = pg.Rect(0, 0, bar.width, bar.height)
+    bounded_position = playerSprite.rect.clamp(map_bounds).topleft
+    if bounded_position != playerSprite.rect.topleft:
+      body.set_position(*bounded_position)
+    playerObj.x, playerObj.y = playerSprite.rect.topleft
     playerObj.cycleSprites(bool(dx or dy))
     world.update(tick)
-    camera.follow(playerObj)
+    zoom_camera.update(tick)
+
+
+  def add_sprite(self, *sprites):
+    world.add_sprite(*sprites)
 
 
   def drawMap(self, screen):
