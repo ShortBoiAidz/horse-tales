@@ -113,8 +113,8 @@ while True:
 
 
   if DEBUG:
-    print("========")
-    printMapstateDebug.printDebug()
+    # printMapstateDebug.printDebug()
     playerObj.printDebug()
     soundstatesObject.printDebug()
     bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
+    print("========")

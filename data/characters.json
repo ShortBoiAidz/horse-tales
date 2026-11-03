@@ -1,8 +1,6 @@
 {
   "Characters": {
     "bartender": {
-      "name": "Bartender",
-
       "dialog": [
         "You seem down. Why the long face?",
         "Oh...you're upset? Bummer.",
