@@ -1,34 +1,39 @@
+import json
 import pygame as pg
 import random
 
 
 from data.components import sounds
 from data.states import mapstates
-from PygameTkinterGUITools import *
+from libraries.PygameTkinterGUITools import *
 
+
+#& ----------------------------------
+
+with open("data/characters.json", "r") as characters:
+    charactersJSON = json.load(characters)
 
 screen = pg.display.set_mode([800, 800])
 
 
-def nextLine():
-  global line
+#& ----------------------------------
 
 
-  line = (line + 1) % len(bartenderObj.dialog)
+#$suggestion Thinking of making a seperate animated sprite for the green exclamation mark so we can render it over any character.
 
 
-class Bartender(pg.sprite.Sprite):
-  #note^ Bartender's name is Gek
-  def __init__(self):
-    global line
+class  Character(pg.sprite.Sprite):
+  def __init__(self, character, x, y):
 
 
     super().__init__()
-    self.x = 310
-    self.y = 170
 
 
-    self.idleImage = pg.image.load("assets/textures/characters/bartender/idle.png")
+    self.x = x
+    self.y = y
+
+
+    self.idleImage = pg.image.load(f"assets/textures/characters/{character}/idle.png")
     self.idleImage = pg.transform.scale(self.idleImage, (72, 72))
 
 
@@ -42,29 +47,14 @@ class Bartender(pg.sprite.Sprite):
     self.snip = self.font.render('', True, (255, 255, 255))
 
 
-    self.dialog = [
-                    "You seem down. Why the long face?",
-                    "Oh...you're upset? Bummer.",
-                    "Fortunately for me, I'm doing better than you.",
-                    "My go-to solution is always resorting to alcohol. Fancy a beer?"
-                  ] #note^ Editable
-   
-    self.randomDialog = [
-                          "My wife left me twice. She's in a wheelchair now.",
-                          "Kinda sucks how alcohol poisons you. My ex wife found that out the hard way.",
-                          "You know, it's really not ideal how all of my customers are \"under the legal age to drink.\" I just think the police are trying to clear everyone out so their orders get priority.",
-                          "Saw the funniest thing the other day. What was it? Chicken butt.",
-                          "A mime taught me how to make a joke. I couldn't tell you how funny it was.",
-                          "My neighbours knocked on my door at 2 in the morning. 2 in the FRICKIN' morning. Thankfully I was up playing my bagpipes.",
-                          "Met this lad named Daniel. He came into my bar without any pants. Then he told me he was lower class and it all made sense... quite the jokester, that one."
-                        ] #note^ Editable
-   
+    self.dialog = (charactersJSON["Characters"][f"{character}"]["dialog"])
+    self.randomDialog = (charactersJSON["Characters"][f"{character}"]["randomDialog"])
+
     #TODO: Make a randomised function for the "random dialog" so the random dialog text plays AFTER the normal dialog happens
 
 
     self.activeMessage = 0
     self.activeRandomMessage = random.randint(0, len(self.randomDialog) - 1)
-
 
     self.dialog = self.dialog[self.activeMessage]
     self.randomDialog = self.randomDialog[self.activeRandomMessage]
@@ -74,20 +64,6 @@ class Bartender(pg.sprite.Sprite):
 
 
     self.sprites = []
-
-
-    #~path I would love to change these to camelSnake_case
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (1).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (2).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (3).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (4).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (5).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (6).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (7).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (8).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (9).png"))
-    #note^ This is really horrible
-    #$suggestion Perhaps make a spritesheet instead
 
 
     self.current_sprite = 0
@@ -121,6 +97,28 @@ class Bartender(pg.sprite.Sprite):
 
   def printDebug(self, message):
     print(message)
+
+class Bartender(Character):
+  #note^ Bartender's name is Gek
+  def __init__(self):
+    global line
+
+
+    super().__init__("bartender", 310, 170)
+
+
+    #~path I would love to change these to camelSnake_case
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (1).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (2).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (3).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (4).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (5).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (6).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (7).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (8).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (9).png"))
+    #note^ This is really horrible
+    #$suggestion Perhaps make a spritesheet instead
 
 
 class BartenderDialog:
@@ -157,6 +155,13 @@ class BartenderDialog:
 
     bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
     screen.blit(bartenderObj.snip, (10, 710))
+
+
+  def nextLine():
+    global line
+
+
+    line = (line + 1) % len(bartenderObj.dialog)
 
 
 bartenderObj = Bartender()

@@ -3,7 +3,7 @@
 #* Please refer to './rulesForDevs.py' for information on how to structure documents.
 
 
-from data.states import cutscenes, mapstates, soundstates
+from data.states import mapstates, soundstates
 from data.components import items, sounds, characters, enemies, maps
 
 

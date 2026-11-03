@@ -1,13 +1,41 @@
 import pygame as pg
 from pytmx.util_pygame import load_pygame as lpg
-from PygameTkinterGUITools import *
+from libraries.PygameTkinterGUITools import *
 
 
 from data.states import mapstates
 from data.components import player
+from libraries.revampedTkinterTools import *
+
+
+#& ----------------------------------
 
 
 SPEED = 100
+
+
+#& ----------------------------------
+
+
+class TitleScreen():
+  def __init__(self, screen):
+    global menu, currentMapObj
+
+    menu = Root(screen, padding=300)
+    menu.columnconfigure(0, weight=1)
+
+    currentMapObj = mapstates.currentMap()
+
+    createLabel(menu, "Horse Tale", 48, 0).draw()
+    
+    Button(menu, text="Start Game", command=lambda: setattr(currentMapObj, 'mapstate', "bar")).grid(row=1, column=0, pady=(0, 10))
+    
+    createLabel(menu, "Code by ShortBoiAidz \n Music by Helo and 1empted \n Maps by TeejMeister22", 24, 2).draw()
+
+
+  def drawMap(self, screen):
+    menu.draw(screen)
+
 
 
 class Bar():

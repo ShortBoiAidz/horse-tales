@@ -1,5 +1,5 @@
 import pygame as pg
-from PygameTkinterGUITools import *
+from libraries.PygameTkinterGUITools import *
 
 
 class Player(pg.sprite.Sprite):

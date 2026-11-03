@@ -2,7 +2,7 @@ import pygame as pg
 
 from data.states import mapstates
 from data.components import sounds
-from PygameTkinterGUITools import *
+from libraries.PygameTkinterGUITools import *
 
 class checkSounds():
   def __init__(self):
@@ -15,7 +15,7 @@ class checkSounds():
     match self.mapstate:
       case "titleScreen":
         sounds.ThemeSound("HorseTale_mainTheme").play()
-        self.sound = "Horse Tale Main Theme | ShortBoiAidz"
+        self.sound = "Horse Tale Main Theme | 1empted"
 
       case "bar":
         sounds.ThemeSound("long_face").play()

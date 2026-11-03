@@ -2,18 +2,19 @@ import pygame as pg
 
 from data.components import maps, sounds
 from data.states import soundstates
-from PygameTkinterGUITools import *
+from libraries.PygameTkinterGUITools import *
 from pytmx.util_pygame import load_pygame as lpg
 
 class defineObjects():
   @staticmethod
   def update():
-    global currentMapObject, soundstatesObject, bar
+    global currentMapObject, soundstatesObject, bar, title
 
     currentMapObject = currentMap()
     soundstatesObject = soundstates.checkSounds()
 
     bar = maps.Bar()
+    title = maps.TitleScreen(pg.display.get_surface())
 
 class currentMap:
   def __init__(self):
@@ -21,6 +22,8 @@ class currentMap:
 
   def update(self, screen):
     match self.mapstate:
+      case "titleScreen":
+        title.drawMap(screen)
       case "bar":
         bar.drawMap(screen)
       case "cave":

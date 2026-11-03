@@ -1,0 +1,23 @@
+{
+  "Characters": {
+    "bartender": {
+      "name": "Bartender",
+
+      "dialog": [
+        "You seem down. Why the long face?",
+        "Oh...you're upset? Bummer.",
+        "Fortunately for me, I'm doing better than you.",
+        "My go-to solution is always resorting to alcohol. Fancy a beer?"
+      ],
+      "randomDialog": [
+        "My wife left me twice. She's in a wheelchair now.",
+        "Kinda sucks how alcohol poisons you. My ex wife found that out the hard way.",
+        "You know, it's really not ideal how all of my customers are \"under the legal age to drink.\" I just think the police are trying to clear everyone out so their orders get priority.",
+        "Saw the funniest thing the other day. What was it? Chicken butt.",
+        "A mime taught me how to make a joke. I couldn't tell you how funny it was.",
+        "My neighbours knocked on my door at 2 in the morning. 2 in the FRICKIN' morning. Thankfully I was up playing my bagpipes.",
+        "Met this lad named Daniel. He came into my bar without any pants. Then he told me he was lower class and it all made sense... quite the jokester, that one."
+      ]
+    }
+  }
+}
