@@ -1,3 +1,4 @@
+
 import pygame as pg
 from libraries.PygameTkinterGUITools import *
 
@@ -6,10 +7,10 @@ from libraries.PygameTkinterGUITools import *
 
 class createLabel():
   def __init__(self, scene, text, font_size, row):
-    """Creates a label using Pygame Tkinter Gui Tools but makes it a little easier to read. Kind of just an extra layer of readability.
+    """Creates a label using Pygame Tkinter Gui Tools but makes it a little easier to read and write. Kind of just an extra layer of maintainability.
 
     Args:
-        scene (str or var): The scene to which the label belongs. E.g. "menu" or "game"
+        scene (str): The scene to which the label belongs. E.g. "menu" or "game"
         text (str): The text to display on the label
         font_size (int): The size of the font for the label
         row (int): The row position of the label

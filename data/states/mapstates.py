@@ -27,6 +27,11 @@ class currentMap:
     self.mapstate = "titleScreen"
 
   def update(self, screen):
+    """Uses a switch statement to switch maps and render them using their corresponding drawMap(_screen_) function
+
+    Args:
+        screen (pygame.Surface): The screen surface to draw the map on
+    """
     PrintDebug.printDebug()
     match self.mapstate:
       case "titleScreen":
