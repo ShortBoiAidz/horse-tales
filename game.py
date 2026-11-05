@@ -32,14 +32,14 @@ def init_pygame():
       _screen_: Sets pygame display mode
       _clock_: Pygame _Clock()_ function
   """
-  global clock, bartenderObj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, bartenderDialogObj, barObj, mapstatesDefineObjects, soundstatesObject
+  global clock, bartenderObj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, bartenderDialogObj, barObj, mapstatesDefineObjects, soundstatesObject, characterObj
 
 
   screen = pg.display.set_mode((WIDTH, HEIGHT))
   clock = pg.time.Clock()
 
 
-  bartenderObj = characters.Bartender()
+  bartenderObj = characters.characterObj.bartenderObj
   #note^ Character objects
 
 
@@ -57,6 +57,7 @@ def init_pygame():
   playerObj = maps.playerObj
   playerAnimator = playerObj.playerAnimator
   playerSprite = playerObj.playerSprite
+  characterObj = characters.characterObj
   #note^ Objects and stuff
 
 
@@ -75,8 +76,8 @@ def process_logic():
   """
   barObj.update(tick, keys)
   currentMap.update(screen)
-  bartenderObj.update()
-  bartenderDialogObj.update(keys)
+  # # bartenderObj.update()
+  # bartenderDialogObj.update(keys)
 
 
 #& ----------------------------------
@@ -85,6 +86,7 @@ def process_logic():
 def draw_game():
   """Renders the game.
   """
+  characterObj.drawCharacters(screen)
   pg.display.flip()
 
 
@@ -116,5 +118,5 @@ while True:
     printMapstateDebug.printDebug()
     playerObj.printDebug()
     soundstatesObject.printDebug()
-    bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
+    # bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
     print("========")

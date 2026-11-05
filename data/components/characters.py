@@ -5,7 +5,7 @@ import random
 
 from data.components import sounds
 from data.states import mapstates
-from libraries.PygameTkinterGUITools import *
+from libraries import justEnoughAssets as jea
 
 
 #& ----------------------------------
@@ -107,96 +107,62 @@ class Character(pg.sprite.Sprite):
 
 #& ----------------------------------
 
-class Bartender(Character):
-  #note^ Bartender's name is Gek
-  def __init__(self):
-    super().__init__("bartender", 310, 170)
-
-
-    #~path I would love to change these to camelSnake_case
-    self.sprites.append(pg.image.load("assets/textures/characters/danielPrank/animation/frame (1).png"))
-    #note^ This is really horrible
-    #$suggestion Perhaps make a spritesheet instead
-
-
 class BartenderDialog:
-  def __init__(self):
-    self.textRunning = False
+  pass
+#   def __init__(self):
+#     self.textRunning = False
 
 
-  def update(self, keys):
-    if (keys[pg.K_e] == True):
-      self.textRunning = True
-      bartenderObj.status = "active"
+#   def update(self, keys):
+#     if (keys[pg.K_e] == True):
+#       self.textRunning = True
+#       bartenderObj.status = "active"
 
 
-    if self.textRunning == True:
-      self.drawDialog()
+#     if self.textRunning == True:
+#       self.drawDialog()
      
-    if bartenderObj.textCompleted and keys[pg.K_e] == True:
-      bartenderObj.activeMessage += 1
-      self.drawDialog()
-      self.textRunning = False
+#     if bartenderObj.textCompleted and keys[pg.K_e] == True:
+#       bartenderObj.activeMessage += 1
+#       self.drawDialog()
+#       self.textRunning = False
 
 
-  def drawDialog(self):
-    pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
+#   def drawDialog(self):
+#     pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
    
-    if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialog):
-      bartenderObj.textCounter += 1
-      sounds.SFXSound("bartender_voice").play()
+#     if bartenderObj.textCounter < bartenderObj.textSpeed * len(bartenderObj.dialog):
+#       bartenderObj.textCounter += 1
+#       sounds.SFXSound("bartender_voice").play()
 
 
-    elif (bartenderObj.textCounter >= bartenderObj.textSpeed * len(bartenderObj.dialog)):
-      bartenderObj.textCompleted = True
+#     elif (bartenderObj.textCounter >= bartenderObj.textSpeed * len(bartenderObj.dialog)):
+#       bartenderObj.textCompleted = True
 
 
-    bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
-    screen.blit(bartenderObj.snip, (10, 710))
+#     bartenderObj.snip = bartenderObj.font.render(bartenderObj.dialog[0: bartenderObj.textCounter//bartenderObj.textSpeed], True, (255, 255, 255))
+#     screen.blit(bartenderObj.snip, (10, 710))
 
 
-  def nextLine():
-    global line
+#   def nextLine():
+#     global line
 
 
-    line = (line + 1) % len(bartenderObj.dialog)
-
-
-#& ----------------------------------
-
-
-class DanielPrank(Character):
-  def __init__(self):
-    global line
-
-
-    super().__init__("bartender", 310, 170)
-
-
-    #~path I would love to change these to camelSnake_case
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (1).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (2).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (3).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (4).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (5).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (6).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (7).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (8).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (9).png"))
-    #note^ This is really horrible
-    #$suggestion Perhaps make a spritesheet instead
-
-
-class DanielPrankDialog():
-  def __init__(self):
-    pass
+#     line = (line + 1) % len(bartenderObj.dialog)
 
 
 #& ----------------------------------
 
+class RenderCharacters():
+  def __init__(self):
+    self.danielPrank = jea.Character(character="danielPrank", x=400, y=400, pathToImg="assets/textures/characters/danielPrank", allowJSON=True, pathToJSON="data/characters.json")
 
-bartenderObj = Bartender()
+    self.bartenderObj = jea.Character(character="bartender", x=310, y=170, pathToImg="assets/textures/characters/bartender", animation=True, pathToAnimation="assets/textures/characters/bartender/animation/bartenderActive_spritesheet.png", width=33, height=33, rows=3, cols=4, allowJSON=True, pathToJSON="data/characters.json")
+
+  def drawCharacters(self, screen):
+    self.bartenderObj.draw(screen, scaledSize=72)
+
+#& ----------------------------------
+
 bartenderDialogObj = BartenderDialog()
-
-danielPrankObj = DanielPrank()
-danielPrankDialogObj = DanielPrankDialog()
+characterObj = RenderCharacters()

@@ -5,7 +5,7 @@ from libraries.PygameTkinterGUITools import *
 
 from data.states import mapstates
 from data.components import player
-from libraries.revampedTkinterTools import *
+from libraries.justEnoughAssets import *
 
 
 #& ----------------------------------
