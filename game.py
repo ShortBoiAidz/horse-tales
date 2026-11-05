@@ -48,10 +48,10 @@ def init_pygame():
   printMapstateDebug = mapstates.PrintDebug()
   #note^ Map shit
 
+  mapstatesDefineObjects.update()
 
   soundstatesObject = soundstates.checkSounds()
   bartenderDialogObj = characters.bartenderDialogObj
-  mapstatesDefineObjects.update()
   barObj = mapstates.bar
   barObj.add_sprite(bartenderObj)
   playerObj = maps.playerObj

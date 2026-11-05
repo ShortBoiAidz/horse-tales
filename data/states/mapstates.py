@@ -24,7 +24,7 @@ class defineObjects():
 
 class currentMap:
   def __init__(self):
-    self.mapstate = "titleScreen"
+    self.mapstate = "bar"
 
   def update(self, screen):
     """Uses a switch statement to switch maps and render them using their corresponding drawMap(_screen_) function

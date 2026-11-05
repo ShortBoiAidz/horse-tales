@@ -13,7 +13,9 @@
 #* 9) Try to keep camelCase and rarely use snake_case for variables, class names, and functions.
 #* 10) Idealy use camelSnake_case for assets (i.e. spritesheets, mapsheets, etc)
 
+
 #& ----------------------------------
+
 
 #* ==========
 #* COMMENTING
@@ -28,3 +30,15 @@
 #$suggestion = Suggestion for other collaborators
 #* = Typically for headings.
 #// = Commenting out code
+
+
+#& ----------------------------------
+
+
+#* ==========
+#* NAVIGATION
+#* ==========
+
+#* CHANGE MAPSTATES
+#~path ./data/states/mapstates.py
+#note^ Change currentMap.mapstate to whatever works in the switch (match) statement

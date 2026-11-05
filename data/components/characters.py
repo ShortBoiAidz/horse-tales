@@ -22,8 +22,15 @@ screen = pg.display.set_mode([800, 800])
 #$suggestion Thinking of making a seperate animated sprite for the green exclamation mark so we can render it over any character.
 
 
-class  Character(pg.sprite.Sprite):
+class Character(pg.sprite.Sprite):
   def __init__(self, character, x, y):
+    """Base class for different characters to inherit from.
+
+    Args:
+        character (_str_): Name of the directory containing images for the character.
+        x (_int_): starting X coordinate
+        y (_int_): starting Y coordinate
+    """
 
 
     super().__init__()
@@ -98,25 +105,16 @@ class  Character(pg.sprite.Sprite):
   def printDebug(self, message):
     print(message)
 
+#& ----------------------------------
+
 class Bartender(Character):
   #note^ Bartender's name is Gek
   def __init__(self):
-    global line
-
-
     super().__init__("bartender", 310, 170)
 
 
     #~path I would love to change these to camelSnake_case
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (1).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (2).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (3).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (4).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (5).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (6).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (7).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (8).png"))
-    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (9).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/danielPrank/animation/frame (1).png"))
     #note^ This is really horrible
     #$suggestion Perhaps make a spritesheet instead
 
@@ -164,5 +162,41 @@ class BartenderDialog:
     line = (line + 1) % len(bartenderObj.dialog)
 
 
+#& ----------------------------------
+
+
+class DanielPrank(Character):
+  def __init__(self):
+    global line
+
+
+    super().__init__("bartender", 310, 170)
+
+
+    #~path I would love to change these to camelSnake_case
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (1).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (2).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (3).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (4).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (5).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (6).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (7).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (8).png"))
+    self.sprites.append(pg.image.load("assets/textures/characters/bartender/animation/frame (9).png"))
+    #note^ This is really horrible
+    #$suggestion Perhaps make a spritesheet instead
+
+
+class DanielPrankDialog():
+  def __init__(self):
+    pass
+
+
+#& ----------------------------------
+
+
 bartenderObj = Bartender()
 bartenderDialogObj = BartenderDialog()
+
+danielPrankObj = DanielPrank()
+danielPrankDialogObj = DanielPrankDialog()

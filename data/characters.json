@@ -16,6 +16,20 @@
         "My neighbours knocked on my door at 2 in the morning. 2 in the FRICKIN' morning. Thankfully I was up playing my bagpipes.",
         "Met this lad named Daniel. He came into my bar without any pants. Then he told me he was lower class and it all made sense... quite the jokester, that one."
       ]
+    },
+
+    "danielPrank": {
+      "dialog": [
+        "Knock knock.",
+        "\"Who's there?\" they say...",
+        "Well they (the rich) call me Daniel. Daniel Prank.",
+        "April fools, loser. My name isn't even Daniel.",
+        "As you can see by my lack of trousers. I am of the lower-class. That means I have no money.",
+        "Many of my fellow lower-class slaves—",
+        "FRIENDS. Many of my fellow lower-class friends do not own pants. Kinda makes sense seeing as lower-class slaves—",
+        "PEOPLE. Seeing as lower-class people don't wear pants.",
+        "I see that you're wearing pants, you rich bastard. You have no respect for the lower-class. Take them off, FREAK."
+      ]
     }
   }
 }
