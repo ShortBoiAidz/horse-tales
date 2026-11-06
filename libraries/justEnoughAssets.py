@@ -39,6 +39,7 @@ class Character(pg.sprite.Sprite):
         y (_int_): The y-coordinate of the character's position.
         pathToImg (_str_): The path to the directory containing the character's image assets.
         
+        dialogKey (_UNAVAILABLE_): The key to toggle dialog.
         animation (_bool_): Whether the character has an animation. Defaults to False.
         pathToAnimation (_str_): The path to the directory containing the character's animation spritesheet.
         width (_int_): The width of each frame in the animation spritesheet.
@@ -106,7 +107,14 @@ class Character(pg.sprite.Sprite):
 
 
 
-  def update(self, keys, screen):
+  def update(self, screen, tick, keys):
+    """Detects if the 'toggleDialog' key is pressed. If true, runs the dialog until the 'toggleDialog' key is pressed again.
+
+    Args:
+        screen (_type_): _description_
+        tick (_type_): _description_
+        keys (_type_): _description_
+    """
     if (keys[pg.K_e] == True):
       self.textRunning = True
       self.status = "active"

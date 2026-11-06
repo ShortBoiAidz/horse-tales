@@ -32,7 +32,7 @@ def init_pygame():
       _screen_: Sets pygame display mode
       _clock_: Pygame _Clock()_ function
   """
-  global clock, bartenderObj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, bartenderDialogObj, barObj, mapstatesDefineObjects, soundstatesObject, characterObj
+  global clock, bartenderObj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, barObj, mapstatesDefineObjects, soundstatesObject, renderCharactersObj
 
 
   screen = pg.display.set_mode((WIDTH, HEIGHT))
@@ -40,16 +40,16 @@ def init_pygame():
 
 
   #* Character Objects
-  characterObj = characters.characterObj
-  bartenderObj = characterObj.bartenderObj
+  renderCharactersObj = characters.RenderCharacters()
+  bartenderObj = renderCharactersObj.bartenderObj
 
 
   #* Map objects
   mapstatesDefineObjects = mapstates.defineObjects()
   currentMap = mapstates.currentMap()
   printMapstateDebug = mapstates.PrintDebug()
-  barObj = maps.Bar
-  barObj.add_sprite(bartenderObj) #!bug Bartender does not stay put when the camera is following the player
+  barObj = maps.Bar()
+  barObj.add_sprite(bartenderObj) #!bug Bartender does not stay stationary
 
 
   #* Misc Objects
@@ -74,7 +74,7 @@ def process_logic():
   """
   barObj.update(screen, tick, keys)
   currentMap.update(screen)
-  characterObj.updateCharacters(keys, screen)
+  renderCharactersObj.updateCharacters(screen, tick, keys)
 
 
 #& ----------------------------------

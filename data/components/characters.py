@@ -27,8 +27,7 @@ class RenderCharacters():
   def drawCharacters(self, screen):
     self.bartenderObj.draw(screen, scaledSize=72)
   
-  def updateCharacters(self, keys, screen):
-    self.bartenderObj.update(keys, screen)
+  def updateCharacters(self, screen, tick, keys):
+    self.bartenderObj.update(screen, tick, keys)
 
 #& ----------------------------------
-characterObj = RenderCharacters()

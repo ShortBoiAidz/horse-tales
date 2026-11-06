@@ -7687,7 +7687,7 @@ class SpriteObject(pg.sprite.Sprite):
     def handle_event(self, event, offset=(0, 0)):
         pass
 
-    def update(self, tick):
+    def update(self, screen, tick, keys):
         """Play the animation (if there is an Animator)."""
         if self.animator:
             self.image = self._fit(self.animator.update(tick, self.flip_x, self.flip_y))
@@ -7811,7 +7811,7 @@ class World:
         """Add one or more sprites (player, enemies...)."""
         self.sprites.add(*sprites)
 
-    def update(self, tick):
+    def update(self, screen, tick, keys):
         """Animate tiles and sprites."""
         for tiles in self._tile_groups():
             if self.chunks:
@@ -7821,7 +7821,7 @@ class World:
                 for tile in tiles:
                     tile.update(tick)
         for sprite in self.sprites:
-            sprite.update(tick)
+            sprite.update(screen, tick, keys)
 
     def _tile_groups(self):
         """The map's tile groups (older maps made in code may have no midground)."""

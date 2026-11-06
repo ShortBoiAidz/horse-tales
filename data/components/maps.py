@@ -97,11 +97,12 @@ class Bar():
     speed = SPEED * ground.get("speed", 1)
 
 
-  def update(self, tick, keys):
+  def update(self, screen, tick, keys):
     """Updates the player on the _Bar_ map
 
 
     Args:
+        screen (pygame.display.surface()): The surface basically passing through a heap of stuff
         tick (integer): Tick rate of pygame's _Clock()_ (FPS)
         keys (bool): Returns a boolean if a detected key is pressed
     """
@@ -117,7 +118,7 @@ class Bar():
       body.set_position(*bounded_position)
     playerObj.x, playerObj.y = playerSprite.rect.topleft
     playerObj.cycleSprites(bool(dx or dy))
-    world.update(tick)
+    world.update(screen, tick, keys)
     zoom_camera.update(tick)
 
 
