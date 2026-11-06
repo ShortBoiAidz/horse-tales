@@ -101,6 +101,48 @@ class Character(pg.sprite.Sprite):
     self.rect = self.idleImage.get_rect(topleft=(self.x, self.y))
 
 
+
+    self.textRunning = False
+
+
+
+  def update(self, keys, screen):
+    if (keys[pg.K_e] == True):
+      self.textRunning = True
+      self.status = "active"
+
+
+    if self.textRunning == True:
+      self._drawDialog(screen)
+     
+    if self.textCompleted and keys[pg.K_e] == True:
+      self.activeMessage += 1
+      self._drawDialog(screen)
+      self.textRunning = False
+
+
+  def _drawDialog(self, screen):
+    pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
+   
+    if self.textCounter < self.textSpeed * len(self.dialog):
+      self.textCounter += 1
+
+
+    elif (self.textCounter >= self.textSpeed * len(self.dialog)):
+      self.textCompleted = True
+
+
+    self.snip = self.font.render(self.dialog[0: self.textCounter//self.textSpeed], True, (255, 255, 255))
+    screen.blit(self.snip, (10, 710))
+
+
+  def nextLine(self):
+    global line
+
+
+    line = (line + 1) % len(self.dialog)
+
+
   def draw(self, screen, scaledSize=None, camera=None):
     """Draws the character sprite on the screen. If the character has an animation, it will cycle through the animation frames. If not, it will display the idle image.
 

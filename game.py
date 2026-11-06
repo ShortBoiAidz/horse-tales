@@ -39,26 +39,24 @@ def init_pygame():
   clock = pg.time.Clock()
 
 
-  bartenderObj = characters.characterObj.bartenderObj
-  #note^ Character objects
+  #* Character Objects
+  characterObj = characters.characterObj
+  bartenderObj = characterObj.bartenderObj
 
 
+  #* Map objects
   mapstatesDefineObjects = mapstates.defineObjects()
   currentMap = mapstates.currentMap()
   printMapstateDebug = mapstates.PrintDebug()
-  #note^ Map shit
+  barObj = maps.Bar
+  barObj.add_sprite(bartenderObj) #!bug Bartender does not stay put when the camera is following the player
 
-  mapstatesDefineObjects.update()
 
+  #* Misc Objects
   soundstatesObject = soundstates.checkSounds()
-  bartenderDialogObj = characters.bartenderDialogObj
-  barObj = mapstates.bar
-  barObj.add_sprite(bartenderObj)
   playerObj = maps.playerObj
   playerAnimator = playerObj.playerAnimator
   playerSprite = playerObj.playerSprite
-  characterObj = characters.characterObj
-  #note^ Objects and stuff
 
 
   pg.init()
@@ -74,10 +72,9 @@ def init_pygame():
 def process_logic():
   """Runs _update()_ functions for objects.
   """
-  barObj.update(tick, keys)
+  barObj.update(screen, tick, keys)
   currentMap.update(screen)
-  # # bartenderObj.update()
-  # bartenderDialogObj.update(keys)
+  characterObj.updateCharacters(keys, screen)
 
 
 #& ----------------------------------
@@ -86,7 +83,6 @@ def process_logic():
 def draw_game():
   """Renders the game.
   """
-  characterObj.drawCharacters(screen)
   pg.display.flip()
 
 

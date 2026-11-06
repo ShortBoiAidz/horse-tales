@@ -10,8 +10,10 @@ from pytmx.util_pygame import load_pygame as lpg
 
 
 class defineObjects():
-  @staticmethod
-  def update():
+  def __init__(self):
+    self._defineObjects()
+    
+  def _defineObjects(self):
     global currentMapObj, soundstatesObj, bar, title
 
     currentMapObj = currentMap()
