@@ -3,8 +3,8 @@
 #* Please refer to './rulesForDevs.py' for information on how to structure documents.
 
 
-from data.states import cutscenes, mapstates, soundstates
-from data.components import items, sounds, player, characters, enemies, maps
+from data.states import mapstates, soundstates
+from data.components import items, sounds, characters, enemies, maps
 
 
 import pygame as pg
@@ -17,8 +17,8 @@ import sys
 WIDTH, HEIGHT = 800, 800
 GAME_NAME = "Horse Tale"
 DEBUG = True
-HITBOX = False
-FPS = 20
+HITBOX = True
+FPS = 30
 
 
 #& ----------------------------------
@@ -32,31 +32,31 @@ def init_pygame():
       _screen_: Sets pygame display mode
       _clock_: Pygame _Clock()_ function
   """
-  global clock, bartenderObj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, bartenderDialogObj, barObj, mapstatesDefineObjects, soundstatesObject
+  global clock, bartenderObj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, barObj, mapstatesDefineObjects, soundstatesObject, renderCharactersObj
 
 
   screen = pg.display.set_mode((WIDTH, HEIGHT))
   clock = pg.time.Clock()
 
 
-  bartenderObj = characters.Bartender()
-  playerObj = player.Player()
-  playerAnimator = playerObj.playerAnimator
-  playerSprite = playerObj.playerSprite
-  #note^ Character objects
+  #* Character Objects
+  renderCharactersObj = characters.RenderCharacters()
+  bartenderObj = renderCharactersObj.bartenderObj
 
 
+  #* Map objects
   mapstatesDefineObjects = mapstates.defineObjects()
   currentMap = mapstates.currentMap()
   printMapstateDebug = mapstates.PrintDebug()
-  #note^ Map shit
-
-
-  soundstatesObject = soundstates.checkSounds()
-  bartenderDialogObj = characters.bartenderDialogObj
   barObj = maps.Bar()
-  mapstatesDefineObjects.update()
-  #note^ Objects and stuff
+  barObj.add_sprite(bartenderObj) #!bug Bartender does not stay stationary
+
+
+  #* Misc Objects
+  soundstatesObject = soundstates.checkSounds()
+  playerObj = maps.playerObj
+  playerAnimator = playerObj.playerAnimator
+  playerSprite = playerObj.playerSprite
 
 
   pg.init()
@@ -72,11 +72,9 @@ def init_pygame():
 def process_logic():
   """Runs _update()_ functions for objects.
   """
-  playerObj.update(keys, tick)
+  barObj.update(screen, tick, keys)
   currentMap.update(screen)
-  bartenderObj.update()
-  bartenderDialogObj.update(keys)
-  barObj.update(tick, keys)
+  renderCharactersObj.updateCharacters(screen, tick, keys)
 
 
 #& ----------------------------------
@@ -85,9 +83,6 @@ def process_logic():
 def draw_game():
   """Renders the game.
   """
-  bartenderObj.draw(screen)
-
-
   pg.display.flip()
 
 
@@ -116,8 +111,8 @@ while True:
 
 
   if DEBUG:
-    print("========")
     printMapstateDebug.printDebug()
     playerObj.printDebug()
     soundstatesObject.printDebug()
-    bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
+    # bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
+    print("========")

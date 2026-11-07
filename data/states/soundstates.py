@@ -2,7 +2,7 @@ import pygame as pg
 
 from data.states import mapstates
 from data.components import sounds
-from PygameTkinterGUITools import *
+from libraries.PygameTkinterGUITools import *
 
 class checkSounds():
   def __init__(self):
@@ -13,16 +13,22 @@ class checkSounds():
 
   def playSound(self):
     match self.mapstate:
+      case "titleScreen":
+        #//sounds.ThemeSound("HorseTale_mainTheme").play()
+        sounds.ThemeSound("lordStalPiggies_wConcept").play()
+        self.sound = "Horse Tale Main Theme | 1empted"
+
       case "bar":
-        sounds.barTheme()
+        sounds.ThemeSound("long_face").play()
         self.sound = "Long Face | DJ Foot Fungus"
+        
       case "cave":
-        sounds.caveTheme()
+        sounds.AmbientSound("cave").play()
         self.sound = "Wow Magic | 1empted"
 
   def printDebug(self):
     print(f"Current track: {self.sound}")
 
   def checkSounds(self):
-    if pg.mixer.get_busy == False:
+    if pg.mixer.get_busy() == False:
       self.playSound()

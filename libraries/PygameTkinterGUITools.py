@@ -7687,7 +7687,7 @@ class SpriteObject(pg.sprite.Sprite):
     def handle_event(self, event, offset=(0, 0)):
         pass
 
-    def update(self, tick):
+    def update(self, screen, tick, keys):
         """Play the animation (if there is an Animator)."""
         if self.animator:
             self.image = self._fit(self.animator.update(tick, self.flip_x, self.flip_y))
@@ -7811,7 +7811,7 @@ class World:
         """Add one or more sprites (player, enemies...)."""
         self.sprites.add(*sprites)
 
-    def update(self, tick):
+    def update(self, screen, tick, keys):
         """Animate tiles and sprites."""
         for tiles in self._tile_groups():
             if self.chunks:
@@ -7821,7 +7821,7 @@ class World:
                 for tile in tiles:
                     tile.update(tick)
         for sprite in self.sprites:
-            sprite.update(tick)
+            sprite.update(screen, tick, keys)
 
     def _tile_groups(self):
         """The map's tile groups (older maps made in code may have no midground)."""
@@ -10565,6 +10565,7 @@ class TopDownBody(Body):
                                    as the sprite
                   (16, 8)        - a feet strip 16 wide and 8 tall, centred
                                    along the bottom of the sprite
+        hitbox_offset - move the feet hitbox from its default position
 
     Example:
         body = TopDownBody(player, solids=walls, speed=200)
@@ -10584,12 +10585,20 @@ class TopDownBody(Body):
         and body.draw_debug(screen, camera) draws it (F1).
     """
 
-    def __init__(self, sprite, solids=None, speed=200, normalize_diagonal=True, hitbox=None):
+    def __init__(self, sprite, solids=None, speed=200, normalize_diagonal=True,
+                 hitbox=None, hitbox_offset=(0, 0)):
         super().__init__(sprite, solids, speed)
         self.hitbox = hitbox
+        self.hitbox_offset = pg.Vector2(hitbox_offset)
         self.normalize_diagonal = normalize_diagonal
         self._direction = pg.Vector2(0, 0)
         self._speed_now = speed
+
+    def _collision_box(self):
+        box = super()._collision_box()
+        if self.hitbox is not None:
+            box.move_ip(self.hitbox_offset)
+        return box
 
     def move(self, dx, dy=0, speed=None):
         """Set the direction to move this frame (-1, 0 or 1 for each)."""
