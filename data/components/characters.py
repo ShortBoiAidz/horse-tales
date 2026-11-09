@@ -7,7 +7,6 @@ from data.components import sounds
 from data.states import mapstates
 from libraries import justEnoughAssets as jea
 
-
 #& ----------------------------------
 
 with open("data/characters.json", "r") as characters:
