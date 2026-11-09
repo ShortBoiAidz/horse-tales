@@ -23,9 +23,9 @@ JEF simplifies Fox's vibe coded library and makes implementation a lot quicker a
 2. Initialise the module in your `process_logic()` function using the following syntax:
 `jea.init()`
 
-3. You do not need to initalise in each module. As long as this runs through your `while` loop, everything should work fine.
+3. You do NOT need to initalise in each module. As long as this runs through your `while` loop, everything should work fine.
 
-4. You do need to import the module in each of your files though (obviously).
+4. You DO need to import the module in each of your files though (obviously).
 
 ========================================================
 
@@ -153,12 +153,14 @@ class Character(pg.sprite.Sprite):
     #* Dialog shit
     self.status = "notTalking"
     self.dialog = (charactersJSON["Characters"][f"{character}"]["dialog"])
+    self.speakingCoords = (350, 300)
     
     self.activeMessage = 0
     self.textCounter = 0
     self.textSpeed = 1
     self.textCompleted = False
     self.textRunning = False
+    self.fixedDialog = True
     
     self.snip = self.font.render('', True, (255, 255, 255))
     self.e_wasPressed = False
@@ -174,8 +176,8 @@ class Character(pg.sprite.Sprite):
   def _loadJSON(self, character, charactersJSON):
     if "randomDialog" in charactersJSON["Characters"][f"{character}"]:
       self.randomDialog = (charactersJSON["Characters"][f"{character}"]["randomDialog"])
-      self.activeRandomMessage = random.randint(0, len(self.randomDialog) - 1)
-      self.randomDialog = self.randomDialog[self.activeRandomMessage]
+    else:
+      self.randomDialog = []
 
 #&--------------------------------------------------------
 
@@ -201,9 +203,25 @@ class Character(pg.sprite.Sprite):
 #&--------------------------------------------------------
 
 #* Dialog
-  def _drawDialog(self, screen):
-    dialog = self.dialog[self.activeMessage]
+  def _hasRandomDialog(self):
+    global visibleText
 
+    randomDialog = self.randomDialog[self.activeRandomMessage]
+    if self.textCounter < self.textSpeed * len(randomDialog):
+      self.textCounter += 1
+      self._playSpeakingSound()
+
+
+    elif self.textCounter >= self.textSpeed * len(randomDialog):
+      self.textCompleted = True
+
+    visibleText = randomDialog[0: self.textCounter // self.textSpeed]
+
+
+  def _hasFixedDialog(self):
+    global visibleText
+
+    dialog = self.dialog[self.activeMessage]
     if self.textCounter < self.textSpeed * len(dialog):
       self.textCounter += 1
       self._playSpeakingSound()
@@ -211,9 +229,18 @@ class Character(pg.sprite.Sprite):
 
     elif self.textCounter >= self.textSpeed * len(dialog):
       self.textCompleted = True
-
-
+      
     visibleText = dialog[0: self.textCounter // self.textSpeed]
+
+
+  def _drawDialog(self, screen):
+    if self.fixedDialog:
+      self._hasFixedDialog()
+
+
+    elif self.fixedDialog == False:
+      self._hasRandomDialog()
+    
     lines = self._wrapDialogText(visibleText, screen.get_width() - 20)
     lineHeight = self.font.get_linesize()
     padding = 10
@@ -228,15 +255,23 @@ class Character(pg.sprite.Sprite):
       screen.blit(self.snip, (padding, panelTop + padding + lineIndex * lineHeight))
 
 
+  def _drawSpeakingCharacter(self, screen):
+    self.idleSpeakingImage = pg.transform.scale(self.idleImage, (200, 200))
+    screen.blit(self.idleSpeakingImage, self.speakingCoords)
+
+
   def _detectTextStatus(self, player):
     if self.textRunning and self.textCompleted:
       self._nextLine()
-    elif not self.textRunning and self.dialog and self.proximity is not None:
+    elif not self.textRunning and (self.dialog or self.randomDialog) and self.proximity is not None:
       self.proximity.interact(player)
 
 
   def _startDialog(self):
-    self.activeMessage = 0
+    if self.fixedDialog:
+      self.activeMessage = 0
+    else:
+      self.activeRandomMessage = random.randrange(len(self.randomDialog))
     self.textCounter = 0
     self.textCompleted = False
     self.textRunning = True
@@ -254,6 +289,7 @@ class Character(pg.sprite.Sprite):
       self.status = "notTalking"
       self.textCounter = 0
       self.textCompleted = False
+      self.fixedDialog = bool(not self.randomDialog)
       self._fadeoutThemeMusic()
 
 
@@ -283,7 +319,7 @@ class Character(pg.sprite.Sprite):
       lines.append(line)
 
     return lines
-  #note^ Also not mine. The nesting is fucking horrible
+  #note^ Also not mine. The nesting is fucking horrendous
 
 #&--------------------------------------------------------
 
@@ -298,7 +334,7 @@ class Character(pg.sprite.Sprite):
       self._detectIfThemeIsPlayable()
 
 
-  def _detectIfThemeIsPlayable(self): #?query Any other names for this?? It fucking sucks
+  def _detectIfThemeIsPlayable(self): #?query Any other names for this?? I can't get much more specific but it's kind of a pain to write
     pg.mixer.music.load(self.themeMusicFile)
     pg.mixer.music.set_volume(self.themeMusicVolume)
     pg.mixer.music.play(loops=-1, fade_ms=500)
@@ -319,6 +355,9 @@ class Character(pg.sprite.Sprite):
         camera (_pg.Rect_, optional): The camera rectangle. Defaults to None.
     """
 
+    if self.status == "talking":
+      self._drawSpeakingCharacter(screen)
+
     if camera is None and hasattr(scaledSize, "apply"):
       camera = scaledSize
 
@@ -332,6 +371,8 @@ class Character(pg.sprite.Sprite):
     else:
       rect = camera.apply(self.rect) if camera else self.rect
       screen.blit(self.idleImage, rect)
+
+    
 
 #&--------------------------------------------------------
 
