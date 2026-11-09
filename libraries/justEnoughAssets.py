@@ -129,20 +129,20 @@ class Character(pg.sprite.Sprite):
     self.y = y
 
 
+    #* Images
+    self.idleImage = pg.image.load(pathToImg + "/idle.png")
+    self.idleImage = pg.transform.scale(self.idleImage, (72, 72))
+
+
     #* Initialising
-    self.proximity = Proximity(self, self.rect.center)
     self.rect = self.idleImage.get_rect(topleft=(self.x, self.y))
+    self.proximity = Proximity(self, self.rect.center)
     
     if allowJSON:
       self._loadJSON(character, charactersJSON)
     
     if self.animation:
       self._loadFromSheet(pathToAnimation, width, height, rows, cols)
-
-    
-    #* Images
-    self.idleImage = pg.image.load(pathToImg + "/idle.png")
-    self.idleImage = pg.transform.scale(self.idleImage, (72, 72))
 
 
     #* Font

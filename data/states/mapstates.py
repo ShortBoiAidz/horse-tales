@@ -47,9 +47,3 @@ class currentMap:
         cave.drawMap(screen)
       case "jungle":
         pass
-
-#&--------------------------------------------------------
-
-#* Debug
-  def printDebug():
-    print(f"Current Map: {currentMapObj.mapstate}")

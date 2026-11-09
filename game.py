@@ -141,7 +141,6 @@ while True:
 
 
   if DEBUG:
-    currentMap.printDebug()
     playerObj.printDebug()
     soundstatesObject.printDebug()
     bartender_obj.printDebug(f"Bartender status: {bartender_obj.status}")
