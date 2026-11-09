@@ -1,0 +1,39 @@
+{
+  "Characters": {
+    "bartender": {
+      "dialog": [
+        "You seem down. Why the long face?",
+        "Oh...you're upset? Bummer.",
+        "Fortunately for me, I'm doing better than you.",
+        "My go-to solution is always resorting to alcohol. Fancy a beer?"
+      ],
+      "randomDialog": [
+        "My wife left me twice. She's in a wheelchair now.",
+        "Kinda sucks how alcohol poisons you. My ex wife found that out the hard way.",
+        "You know, it's really not ideal how all of my customers are \"under the legal age to drink.\" I just think the police are trying to clear everyone out so their orders get priority.",
+        "Saw the funniest thing the other day. What was it? Chicken butt.",
+        "A mime taught me how to make a joke. I couldn't tell you how funny it was.",
+        "My neighbours knocked on my door at 2 in the morning. 2 in the FRICKIN' morning. Thankfully I was up playing my bagpipes.",
+        "Met this lad named Daniel. He came into my bar without any pants. Then he told me he was lower class and it all made sense... quite the jokester, that one."
+      ]
+    },
+
+    "danielPrank": {
+      "dialog": [
+        "Knock knock.",
+        "\"Who's there?\" they say...",
+        "Well they (the borjwazee) call me Daniel. Daniel Prank.",
+        "April fools, loser. My name isn't even Daniel.",
+        "As you can see by my lack of trousers. I am of the lower-class. That means I have no money.",
+        "Many of my fellow lower-class slaves—",
+        "FRIENDS. Many of my fellow lower-class friends do not own pants. Kinda makes sense seeing as lower-class slaves—",
+        "PEOPLE. Seeing as lower-class people don't wear pants.",
+        "I see that you're wearing pants, you rich bastard. You have no respect for the lower-class. Take them off, FREAK.",
+        "Anyways, ever heard of the hit game Deltarune? The one with Tenna?",
+        "TENNA?! I HARDLY KNOW 'ER!",
+        "I love Delatune because of Samuel the Skeleton and Paparizz the...other skeleton",
+        "I love my theme song Bone Trousers by Toby Fox. Bit misleading though."
+      ]
+    }
+  }
+}
