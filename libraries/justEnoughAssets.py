@@ -120,12 +120,16 @@ class Character(pg.sprite.Sprite):
 
     super().__init__()
 
+    self.character = character
 
     self.animation = animation
 
 
     self.x = x
     self.y = y
+
+
+    self.characterSpeaking = character
 
 
     self.idleImage = pg.image.load(pathToImg + "/idle.png")
@@ -138,8 +142,6 @@ class Character(pg.sprite.Sprite):
 
     self.status = "notTalking"
     self.speakingFile = speakingSound
-    self.interactionTarget = None
-    self.interactionRange = 100
 
 
     self.textCounter = 0
@@ -162,6 +164,7 @@ class Character(pg.sprite.Sprite):
       self._loadFromSheet(pathToAnimation, width, height, rows, cols)
 
     self.rect = self.idleImage.get_rect(topleft=(self.x, self.y))
+    self.proximity = Proximity(self, self.rect.center)
 
     self.textRunning = False
 
@@ -172,8 +175,7 @@ class Character(pg.sprite.Sprite):
       self.activeRandomMessage = random.randint(0, len(self.randomDialog) - 1)
       self.randomDialog = self.randomDialog[self.activeRandomMessage]
 
-
-  def update(self, screen, tick):
+  def update(self, screen, tick, player=None):
     """Detects if the 'toggleDialog' key is pressed. If true, runs the dialog until the 'toggleDialog' key is pressed again.
 
     Args:
@@ -187,33 +189,17 @@ class Character(pg.sprite.Sprite):
 
     self.e_wasPressed = e_pressed
 
-    playerNearby = (
-      self.interactionTarget is not None
-      and pg.Vector2(self.rect.center).distance_to(self.interactionTarget.rect.center) <= self.interactionRange
-    )
-    #note^ Detects if the player less than or greater to the interaction range (20)px
-
     if e_justPressed:
-      self._playerNearby(playerNearby)
+      if self.textRunning and self.textCompleted:
+        self._nextLine()
+      elif not self.textRunning and self.dialog and self.proximity is not None:
+        self.proximity.interact(player)
 
     if self.textRunning:
       self._drawDialog(screen)
 
 
-  def _playerNearby(self, playerNearby):
-    if self.textRunning and self.textCompleted:
-            self.nextLine()
-    
-    elif not self.textRunning and self.dialog and playerNearby:
-      self.activeMessage = 0
-      self.textCounter = 0
-      self.textCompleted = False
-      self.textRunning = True
-      self.status = "talking"
-
-
   def _drawDialog(self, screen):
-    pg.draw.rect(screen, (20, 20, 60), [0, 700, 800, 500])
     dialog = self.dialog[self.activeMessage]
 
     if self.textCounter < self.textSpeed * len(dialog):
@@ -225,24 +211,72 @@ class Character(pg.sprite.Sprite):
       self.textCompleted = True
 
 
-    self.snip = self.font.render(dialog[0: self.textCounter//self.textSpeed], True, (255, 255, 255))
-    screen.blit(self.snip, (10, 710))
+    visibleText = dialog[0: self.textCounter // self.textSpeed]
+    lines = self._wrapDialogText(visibleText, screen.get_width() - 20)
+    lineHeight = self.font.get_linesize()
+    padding = 10
+    panelHeight = min(screen.get_height(), max(100, len(lines) * lineHeight + padding * 2))
+    panelTop = screen.get_height() - panelHeight
+    pg.draw.rect(screen, (20, 20, 60), (0, panelTop, screen.get_width(), panelHeight))
+
+    for lineIndex, line in enumerate(lines):
+      self.snip = self.font.render(line, True, (255, 255, 255))
+      screen.blit(self.snip, (padding, panelTop + padding + lineIndex * lineHeight))
+
+
+  def _wrapDialogText(self, text, maxWidth):
+    lines = []
+
+    for paragraph in text.split("\n"):
+      line = ""
+      for word in paragraph.split():
+        candidate = word if not line else f"{line} {word}"
+        if self.font.size(candidate)[0] <= maxWidth:
+          line = candidate
+          continue
+
+        if line:
+          lines.append(line)
+          line = ""
+
+        while word and self.font.size(word)[0] > maxWidth:
+          splitAt = 1
+          while splitAt < len(word) and self.font.size(word[:splitAt + 1])[0] <= maxWidth:
+            splitAt += 1
+          lines.append(word[:splitAt])
+          word = word[splitAt:]
+        line = word
+
+      lines.append(line)
+
+    return lines
+
+  #note^ This entire dialog wrapping thing is not mine. If it was, this nesting wouldn't exist.
 
   def _playSpeakingSound(self):
     if self.speakingFile is not None:
       pg.mixer.Sound(self.speakingFile).play()
 
 
-  def nextLine(self):
+  def _nextLine(self):
     if self.activeMessage + 1 < len(self.dialog):
       self.activeMessage += 1
       self.textCounter = 0
       self.textCompleted = False
+
     else:
       self.textRunning = False
       self.status = "notTalking"
       self.textCounter = 0
       self.textCompleted = False
+
+
+  def _startDialog(self):
+    self.activeMessage = 0
+    self.textCounter = 0
+    self.textCompleted = False
+    self.textRunning = True
+    self.status = "talking"
 
 
   def draw(self, screen, scaledSize=None, camera=None):
@@ -310,6 +344,41 @@ class Character(pg.sprite.Sprite):
 
   def printDebug(self, message):
     print(message)
+
+
+#& ----------------------------------
+
+#* Proximity control
+
+class Proximity():
+  def __init__(self, character, coordinates=None, interactionRange=100, player=None):
+    """__init__ Initialises the proximity control. Detects if the player object is nearby.
+
+    Args:
+        character (_str_): _Character object (the one that has the dialog)_
+        coordinates (_any_, optional): _Coordinates of the character's rect/hitbox_. Defaults to None.
+        interactionRange (int, optional): _Distance (in px) for the proximity to apply_. Defaults to 100.
+    """
+    self.character = character
+    self.coordinates = pg.Vector2(coordinates if coordinates is not None else character.rect.center)
+    self.interactionRange = interactionRange
+    self.player = player
+
+  def isNear(self, player):
+    if player is None:
+      return False
+
+    playerPosition = player.rect.center if hasattr(player, "rect") else player
+
+    return self.coordinates.distance_to(pg.Vector2(playerPosition)) <= self.interactionRange
+
+  def interact(self, player=None):
+    player = player if player is not None else self.player
+    if not self.isNear(player) or not self.character.dialog:
+      return False
+
+    self.character._startDialog()
+    return True
 
 
 #& ----------------------------------

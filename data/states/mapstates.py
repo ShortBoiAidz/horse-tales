@@ -23,6 +23,7 @@ class defineObjects():
     #* Creating maps / scenes
     title = maps.TitleScreen(pg.display.get_surface())
     bar = maps.barMap
+    # cave = maps.caveMap #!bug This needs every tile asset. So far, we just have the TMX file.
 
 #& ----------------------------------
 
