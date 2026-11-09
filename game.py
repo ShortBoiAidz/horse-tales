@@ -4,7 +4,7 @@
 
 
 from data.states import mapstates, soundstates
-from data.components import items, sounds, characters, enemies, maps, player
+from data.components import characters, maps
 from libraries import justEnoughAssets as jea
 
 
@@ -54,6 +54,7 @@ def init_pygame():
   barObj = mapstates.bar
   
   barObj.add_sprite(bartender_obj)
+  barObj.add_sprite(danielPrank_obj)
   soundstatesObject = soundstates.checkSounds()
 
 
@@ -76,10 +77,6 @@ def init_pygame():
     interactionRange=100,
     player=playerSprite,
   )
-
-
-  #* Debug shit
-  printMapstateDebug = mapstates.PrintDebug()
   
 
   pg.init()
@@ -125,6 +122,7 @@ screen, clock = init_pygame()
 
 soundstatesObject.playSound()
 
+#& ===============================
 
 while True:
   keys = pg.key.get_pressed()
@@ -143,7 +141,7 @@ while True:
 
 
   if DEBUG:
-    printMapstateDebug.printDebug()
+    currentMap.printDebug()
     playerObj.printDebug()
     soundstatesObject.printDebug()
     bartender_obj.printDebug(f"Bartender status: {bartender_obj.status}")

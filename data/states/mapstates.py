@@ -9,7 +9,6 @@ from libraries.justEnoughAssets import *
 
 #& ----------------------------------
 
-
 class defineObjects():
   def __init__(self):
     self._defineObjects()
@@ -25,12 +24,14 @@ class defineObjects():
     bar = maps.barMap
     # cave = maps.caveMap #!bug This needs every tile asset. So far, we just have the TMX file.
 
-#& ----------------------------------
-
+#&===============================================
 class currentMap:
   def __init__(self):
     self.mapstate = "bar"
 
+#&--------------------------------------------------------
+
+#* Update
   def update(self, screen):
     """Uses a switch statement to switch maps and render them using their corresponding drawMap(_screen_) function
 
@@ -47,9 +48,8 @@ class currentMap:
       case "jungle":
         pass
 
+#&--------------------------------------------------------
 
-
-class PrintDebug:
-  @staticmethod
+#* Debug
   def printDebug():
     print(f"Current Map: {currentMapObj.mapstate}")

@@ -6,7 +6,7 @@
         "Oh...you're upset? Bummer.",
         "Fortunately for me, I'm doing better than you.",
         "My go-to solution is always resorting to alcohol. Fancy a beer?",
-        "My name is Bartender, by the way.",
+        "My name is Gek, by the way. I'm the local bartender.",
         "BARTENDER?! I HARDLY KNOW 'ER!"
       ],
       "randomDialog": [
@@ -37,6 +37,8 @@
         "I love my theme song Bone Trousers by Toby Fox. Bit misleading though.",
         "If you couldn't tell, I LOVE to talk. I can talk about anything. I can especially talk about the hit game Deltarune, the one with Tenna.",
         "TENNA?! I HARDLY KNOW 'ER!",
+        "You better not be trying to skip through my dialog.",
+        "The rich folk love to do that to assert their wealth over me. Thankfully, skipping dialog is impossible in the hit blockbuster game HORSE TALE by Barhorse Development.",
         "Wanna hear a joke?",
         "Yes? Good.",
         "So a snake walks into a bar, and the bartender asks...",

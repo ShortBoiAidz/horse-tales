@@ -22,11 +22,13 @@ class RenderCharacters():
   def __init__(self) :
     self.Prank = self.danielPrank = jea.Character(
                                     character="danielPrank",
-                                    x=630, y=170,
+                                    x=560, y=147,
                                     pathToImg="assets/textures/characters/danielPrank",
                                     allowJSON=True,
                                     pathToJSON="data/characters.json",
-                                    speakingSound="assets/sounds/music/themes/danielPrank_theme.wav"
+                                    speakingSound=None,
+                                    themeMusic="assets/sounds/music/themes/danielPrank_theme.wav",
+                                    themeMusicVolume=1.5
                                     )
 
     self.bartenderObj = jea.Character(

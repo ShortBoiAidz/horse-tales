@@ -12,8 +12,9 @@ ShortBoiAidz:
 - Sound / music implementation
 - Player movement
 - Documentation revamp
-  - redid some code but kept the same idea (e.g. the player's diagonal movement was still Ali but I just made it easier to read)
+  - Redid some code but kept the same idea (e.g. the player's diagonal movement was still Ali but I just made it easier to read)
 - Player hitboxes
+- Daniel Prank
 
 ------------
 Helo:
