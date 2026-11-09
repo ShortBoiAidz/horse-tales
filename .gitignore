@@ -2,3 +2,4 @@
 ./data/states/__pycache__
 ./data/components/__pycache__
 ./libraries/__pycache__
+*.pyc

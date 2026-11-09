@@ -53,17 +53,11 @@ class Player(pg.sprite.Sprite):
     if left:
       self.x -= self.speed * tick / 1000
       self.facingLeft = True
-
-
     elif right:
       self.x += self.speed * tick / 1000
       self.facingLeft = False
-
-
     elif up:
       self.y -= self.speed * tick / 1000
-
-
     elif down:
       self.y += self.speed * tick / 1000
 
@@ -82,7 +76,7 @@ class Player(pg.sprite.Sprite):
       self.x += self.speed // 3
 
 
-    self.cycleSprites(left or right or up or down)
+    self._cycleSprites(left or right or up or down)
 
 
   def draw(self, screen):
@@ -93,7 +87,7 @@ class Player(pg.sprite.Sprite):
     pg.draw.rect(screen, (255, 0, 0), self.rect, 2)
 
 
-  def cycleSprites(self, moving):
+  def _cycleSprites(self, moving):
     if moving:
       self.playerAnimator.play("walk")
     else:
