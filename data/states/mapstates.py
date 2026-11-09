@@ -1,35 +1,54 @@
 import pygame as pg
 
-from data.components import player, maps, sounds
+from data.components import maps, sounds
 from data.states import soundstates
-from PygameTkinterGUITools import *
-from pytmx.util_pygame import load_pygame as lpg
+
+from libraries.PygameTkinterGUITools import *
+from libraries.justEnoughAssets import *
+
+
+#& ----------------------------------
+
 
 class defineObjects():
-  @staticmethod
-  def update():
-    global currentMapObject, playerObject, soundstatesObject, bar
+  def __init__(self):
+    self._defineObjects()
+    
+  def _defineObjects(self):
+    global currentMapObj, soundstatesObj, bar, title, cave
 
-    currentMapObject = currentMap()
-    playerObject = player.Player()
-    soundstatesObject = soundstates.checkSounds()
+    currentMapObj = currentMap()
+    soundstatesObj = soundstates.checkSounds()
 
-    bar = maps.Bar()
+    #* Creating maps / scenes
+    title = maps.TitleScreen(pg.display.get_surface())
+    bar = maps.barMap
+
+#& ----------------------------------
 
 class currentMap:
   def __init__(self):
     self.mapstate = "bar"
 
   def update(self, screen):
+    """Uses a switch statement to switch maps and render them using their corresponding drawMap(_screen_) function
+
+    Args:
+        screen (pygame.Surface): The screen surface to draw the map on
+    """
     match self.mapstate:
+      case "titleScreen":
+        title.drawMap(screen)
       case "bar":
         bar.drawMap(screen)
       case "cave":
-        pass
+        cave.drawMap(screen)
       case "jungle":
         pass
+
+
 
 class PrintDebug:
   @staticmethod
   def printDebug():
-    print(f"Current Map: {currentMapObject.mapstate}")
+    print(f"Current Map: {currentMapObj.mapstate}")

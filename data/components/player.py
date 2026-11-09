@@ -1,5 +1,5 @@
 import pygame as pg
-from PygameTkinterGUITools import *
+from libraries.PygameTkinterGUITools import *
 
 
 class Player(pg.sprite.Sprite):
@@ -20,16 +20,12 @@ class Player(pg.sprite.Sprite):
     self.playerAnimator.add_animation("idle", [(0, 2)])
     self.playerAnimator.add_animation("walk", [(0, 3), (0, 4)])
 
-
-
-
-    self.x = 170
+    self.x = 190
     self.y = 170
     self.speed = 10
 
 
     self.playerSprite = SpriteObject(self.x, self.y, animator=self.playerAnimator)
-    self.playerSprite.move(20, 0)
 
 
     self.playerAnimator.play("idle")
@@ -65,11 +61,11 @@ class Player(pg.sprite.Sprite):
 
 
     elif up:
-      self.y -= self.speed
+      self.y -= self.speed * tick / 1000
 
 
     elif down:
-      self.y += self.speed
+      self.y += self.speed * tick / 1000
 
 
     if down and left:
