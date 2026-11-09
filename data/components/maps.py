@@ -31,10 +31,10 @@ class defineObjects():
                 playerObject=playerObj
                 )
 
-    # caveMap = Map(
-    #             TMXfile="assets/textures/mapsheets/crystalCave.tmx",
-    #             playerObject=playerObj
-    #             ) #!bug This needs every tile asset. So far, we just have the TMX file.
+    caveMap = Map(
+                TMXfile="assets/textures/mapsheets/crystalCave.tmx",
+                playerObject=playerObj
+                ) #!bug This needs every tile asset. So far, we just have the TMX file.
 
 
 #& ----------------------------------
