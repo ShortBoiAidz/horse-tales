@@ -1,8 +1,8 @@
 import pygame as pg
 
 from data.states import mapstates
-from data.components import sounds
-from libraries.PygameTkinterGUITools import *
+from data.components import sounds, characters
+from libraries import justEnoughAssets as jea
 
 class checkSounds():
   def __init__(self):
@@ -11,6 +11,16 @@ class checkSounds():
     self.mapstate = currentMapObject.mapstate
     self.sound = "[null]"
 
+#&--------------------------------------------------------
+
+#* Check sounds
+  def checkSounds(self):
+    if pg.mixer.get_busy() == False:
+      self.playSound()
+
+#&--------------------------------------------------------
+
+#* Play sounds
   def playSound(self):
     match self.mapstate:
       case "titleScreen":
@@ -25,9 +35,8 @@ class checkSounds():
         sounds.AmbientSound("cave").play()
         self.sound = "Wow Magic | 1empted"
 
+#&--------------------------------------------------------
+
+#* Debug
   def printDebug(self):
     print(f"Current track: {self.sound}")
-
-  def checkSounds(self):
-    if pg.mixer.get_busy() == False:
-      self.playSound()

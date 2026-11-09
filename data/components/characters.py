@@ -19,13 +19,16 @@ screen = pg.display.set_mode([800, 800])
 #& ----------------------------------
 
 class RenderCharacters():
-  def __init__(self):
-    self.danielPrank = jea.Character(
+  def __init__(self) :
+    self.Prank = self.danielPrank = jea.Character(
                                     character="danielPrank",
-                                    x=630, y=170,
+                                    x=560, y=147,
                                     pathToImg="assets/textures/characters/danielPrank",
                                     allowJSON=True,
-                                    pathToJSON="data/characters.json"
+                                    pathToJSON="data/characters.json",
+                                    speakingSound=None,
+                                    themeMusic="assets/sounds/music/themes/danielPrank_theme.wav",
+                                    themeMusicVolume=1.5
                                     )
 
     self.bartenderObj = jea.Character(
@@ -45,8 +48,8 @@ class RenderCharacters():
     self.bartenderObj.draw(screen, scaledSize=72)
     self.danielPrank.draw(screen, scaledSize=72)
   
-  def updateCharacters(self, screen, tick):
-    self.bartenderObj.update(screen, tick)
-    self.danielPrank.update(screen, tick)
+  def updateCharacters(self, screen, tick, player=None):
+    self.danielPrank.update(screen, tick, player)
+    self.bartenderObj.update(screen, tick, player)
 
 #& ----------------------------------

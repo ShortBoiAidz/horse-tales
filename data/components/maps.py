@@ -21,7 +21,7 @@ class defineObjects():
     self._defineObjects()
     
   def _defineObjects(self):
-    global playerObj, playerSprite, barMap
+    global playerObj, playerSprite, barMap, caveMap
 
     playerObj = player.Player()
     playerSprite = playerObj.playerSprite
@@ -30,6 +30,11 @@ class defineObjects():
                 TMXfile="assets/textures/mapsheets/bar.tmx",
                 playerObject=playerObj
                 )
+
+    # caveMap = Map(
+    #             TMXfile="assets/textures/mapsheets/crystalCave.tmx",
+    #             playerObject=playerObj
+    #             ) #!bug This needs every tile asset. So far, we just have the TMX file.
 
 
 #& ----------------------------------
