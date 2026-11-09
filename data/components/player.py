@@ -102,6 +102,3 @@ class Player(pg.sprite.Sprite):
 
   def printDebug(self):
     print(f"Player coords: ({self.x}, {self.y})")
-
-
-# 402 736

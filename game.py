@@ -5,6 +5,7 @@
 
 from data.states import mapstates, soundstates
 from data.components import items, sounds, characters, enemies, maps
+from libraries import justEnoughAssets as jea
 
 
 import pygame as pg
@@ -23,7 +24,6 @@ FPS = 30
 
 #& ----------------------------------
 
-
 def init_pygame():
   """Initialises and globalises objects, Pygame, and variables.
 
@@ -32,8 +32,7 @@ def init_pygame():
       _screen_: Sets pygame display mode
       _clock_: Pygame _Clock()_ function
   """
-  global clock, bartenderObj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, barObj, mapstatesDefineObjects, soundstatesObject, renderCharactersObj
-
+  global clock, bartenderObj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, barObj, mapstatesDefineObjects, mapsDefineObjects, soundstatesObject, renderCharactersObj
 
   screen = pg.display.set_mode((WIDTH, HEIGHT))
   clock = pg.time.Clock()
@@ -45,11 +44,12 @@ def init_pygame():
 
 
   #* Map objects
+  mapsDefineObjects = maps.defineObjects()
   mapstatesDefineObjects = mapstates.defineObjects()
   currentMap = mapstates.currentMap()
   printMapstateDebug = mapstates.PrintDebug()
-  barObj = maps.Bar()
-  barObj.add_sprite(bartenderObj) #!bug Bartender does not stay stationary
+  barObj = mapstates.bar
+  barObj.add_sprite(bartenderObj)
 
 
   #* Misc Objects
@@ -57,7 +57,7 @@ def init_pygame():
   playerObj = maps.playerObj
   playerAnimator = playerObj.playerAnimator
   playerSprite = playerObj.playerSprite
-
+  bartenderObj.interactionTarget = playerSprite
 
   pg.init()
   pg.display.set_caption(GAME_NAME)
@@ -72,9 +72,11 @@ def init_pygame():
 def process_logic():
   """Runs _update()_ functions for objects.
   """
-  barObj.update(screen, tick, keys)
+  jea.init()
+  #note^ No clue why this doesn't work if it's in init_pygame()
+  barObj.update(screen, tick)
   currentMap.update(screen)
-  renderCharactersObj.updateCharacters(screen, tick, keys)
+  renderCharactersObj.updateCharacters(screen, tick)
 
 
 #& ----------------------------------
@@ -114,5 +116,5 @@ while True:
     printMapstateDebug.printDebug()
     playerObj.printDebug()
     soundstatesObject.printDebug()
-    # bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
+    bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
     print("========")

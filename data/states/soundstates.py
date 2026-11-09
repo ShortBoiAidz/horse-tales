@@ -14,7 +14,6 @@ class checkSounds():
   def playSound(self):
     match self.mapstate:
       case "titleScreen":
-        #//sounds.ThemeSound("HorseTale_mainTheme").play()
         sounds.ThemeSound("lordStalPiggies_wConcept").play()
         self.sound = "Horse Tale Main Theme | 1empted"
 

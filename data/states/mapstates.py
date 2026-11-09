@@ -2,8 +2,9 @@ import pygame as pg
 
 from data.components import maps, sounds
 from data.states import soundstates
+
 from libraries.PygameTkinterGUITools import *
-from pytmx.util_pygame import load_pygame as lpg
+from libraries.justEnoughAssets import *
 
 
 #& ----------------------------------
@@ -14,13 +15,14 @@ class defineObjects():
     self._defineObjects()
     
   def _defineObjects(self):
-    global currentMapObj, soundstatesObj, bar, title
+    global currentMapObj, soundstatesObj, bar, title, cave
 
     currentMapObj = currentMap()
     soundstatesObj = soundstates.checkSounds()
 
-    bar = maps.Bar()
+    #* Creating maps / scenes
     title = maps.TitleScreen(pg.display.get_surface())
+    bar = maps.barMap
 
 #& ----------------------------------
 
@@ -34,14 +36,13 @@ class currentMap:
     Args:
         screen (pygame.Surface): The screen surface to draw the map on
     """
-    PrintDebug.printDebug()
     match self.mapstate:
       case "titleScreen":
         title.drawMap(screen)
       case "bar":
         bar.drawMap(screen)
       case "cave":
-        pass
+        cave.drawMap(screen)
       case "jungle":
         pass
 

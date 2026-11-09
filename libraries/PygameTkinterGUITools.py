@@ -67,6 +67,11 @@ _font_files = {}        # short names given to font files with add_font()
 FONT_FILE_TYPES = (".ttf", ".otf", ".ttc", ".fon")
 
 
+def _convert_alpha(surface):
+    """Use the display's pixel format when available; image loads work without it."""
+    return surface.convert_alpha() if pg.display.get_surface() is not None else surface
+
+
 def add_font(name, filename):
     """
     Give a font file a short name, so you can use it anywhere.
@@ -211,7 +216,7 @@ def load_image(image, size=None):
         return None
     key = (image if isinstance(image, str) else id(image), size)
     if key not in _image_cache:
-        surface = pg.image.load(image).convert_alpha() if isinstance(image, str) else image
+        surface = _convert_alpha(pg.image.load(image)) if isinstance(image, str) else image
         if size and surface.get_size() != tuple(size):
             surface = pg.transform.scale(surface, (int(size[0]), int(size[1])))
         _image_cache[key] = surface
@@ -6954,7 +6959,7 @@ class Animator:
             if isinstance(item, pg.Surface):
                 img = item
             else:
-                img = pg.image.load(item).convert_alpha()
+                img = _convert_alpha(pg.image.load(item))
             if self.scale != 1:
                 w, h = img.get_size()
                 img = pg.transform.scale(img, (int(w * self.scale), int(h * self.scale)))
@@ -6967,7 +6972,7 @@ class Animator:
 
     def _load_from_sheet(self, filename, tile_width, tile_height, rows, cols):
         """Slice up the sprite sheet into frames."""
-        sheet = pg.image.load(filename).convert_alpha()
+        sheet = _convert_alpha(pg.image.load(filename))
         for row in range(rows):
             for col in range(cols):
                 x, y = col * tile_width, row * tile_height
@@ -7544,7 +7549,7 @@ class SpriteObject(pg.sprite.Sprite):
         self.animator = animator
 
         if isinstance(image, str):
-            image = pg.image.load(image).convert_alpha()
+            image = _convert_alpha(pg.image.load(image))
         if animator:
             image = animator.frames[0]
         if image is None:
@@ -7687,7 +7692,7 @@ class SpriteObject(pg.sprite.Sprite):
     def handle_event(self, event, offset=(0, 0)):
         pass
 
-    def update(self, screen, tick, keys):
+    def update(self, screen, tick):
         """Play the animation (if there is an Animator)."""
         if self.animator:
             self.image = self._fit(self.animator.update(tick, self.flip_x, self.flip_y))
@@ -7811,7 +7816,7 @@ class World:
         """Add one or more sprites (player, enemies...)."""
         self.sprites.add(*sprites)
 
-    def update(self, screen, tick, keys):
+    def update(self, screen, tick):
         """Animate tiles and sprites."""
         for tiles in self._tile_groups():
             if self.chunks:
@@ -7821,7 +7826,7 @@ class World:
                 for tile in tiles:
                     tile.update(tick)
         for sprite in self.sprites:
-            sprite.update(screen, tick, keys)
+            sprite.update(screen, tick)
 
     def _tile_groups(self):
         """The map's tile groups (older maps made in code may have no midground)."""
