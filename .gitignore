@@ -1,5 +1,5 @@
-./__pycache__
-./data/states/__pycache__
-./data/components/__pycache__
-./libraries/__pycache__
+./__pycache__/*.pyc
+./data/states/__pycache__/*.pyc
+./data/components/__pycache__/*.pyc
+./libraries/__pycache__/*.pyc
 *.pyc
