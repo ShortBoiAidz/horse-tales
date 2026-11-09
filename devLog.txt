@@ -1,0 +1,31 @@
+==================
+DEV LOG
+==================
+
+ShortBoiAidz:
+- Bar map
+- Sprite art (including animations)
+- Bartender voice
+- File structure
+- Literally everything in Just Enough Assets
+- Dialog
+- Sound / music implementation
+- Player movement
+- Documentation revamp
+  - Redid some code but kept the same idea (e.g. the player's diagonal movement was still Ali but I just made it easier to read)
+- Player hitboxes
+- Daniel Prank
+
+------------
+Helo:
+- Player diagonal movement
+- long_face.wav
+
+------------
+TeejMeister22:
+- Crystal cave map
+
+------------
+1empted:
+- sad.wav
+- wowMagic_caveAmbience.wav

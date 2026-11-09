@@ -4,7 +4,7 @@
 
 
 from data.states import mapstates, soundstates
-from data.components import items, sounds, characters, enemies, maps
+from data.components import characters, maps
 from libraries import justEnoughAssets as jea
 
 
@@ -32,7 +32,7 @@ def init_pygame():
       _screen_: Sets pygame display mode
       _clock_: Pygame _Clock()_ function
   """
-  global clock, bartenderObj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, barObj, mapstatesDefineObjects, mapsDefineObjects, soundstatesObject, renderCharactersObj
+  global clock, bartender_obj, danielPrank_obj, playerSprite, playerAnimator, playerObj, currentMap, printMapstateDebug, keys, barObj, mapstatesDefineObjects, mapsDefineObjects, soundstatesObject, renderCharactersObj
 
   screen = pg.display.set_mode((WIDTH, HEIGHT))
   clock = pg.time.Clock()
@@ -40,24 +40,44 @@ def init_pygame():
 
   #* Character Objects
   renderCharactersObj = characters.RenderCharacters()
-  bartenderObj = renderCharactersObj.bartenderObj
+
+  bartender_obj = renderCharactersObj.bartenderObj
+  danielPrank_obj = renderCharactersObj.danielPrank
 
 
-  #* Map objects
+  #* Map and Sound objects
   mapsDefineObjects = maps.defineObjects()
   mapstatesDefineObjects = mapstates.defineObjects()
+
   currentMap = mapstates.currentMap()
-  printMapstateDebug = mapstates.PrintDebug()
+  
   barObj = mapstates.bar
-  barObj.add_sprite(bartenderObj)
+  
+  barObj.add_sprite(bartender_obj)
+  barObj.add_sprite(danielPrank_obj)
+  soundstatesObject = soundstates.checkSounds()
 
 
   #* Misc Objects
-  soundstatesObject = soundstates.checkSounds()
   playerObj = maps.playerObj
   playerAnimator = playerObj.playerAnimator
   playerSprite = playerObj.playerSprite
-  bartenderObj.interactionTarget = playerSprite
+
+
+  #* Proximity Detection
+  bartender_obj.proximity = jea.Proximity(
+    bartender_obj,
+    coordinates=(334, 189),
+    interactionRange=110,
+    player=playerSprite,
+  )
+  danielPrank_obj.proximity = jea.Proximity(
+    danielPrank_obj,
+    coordinates=(630, 170),
+    interactionRange=100,
+    player=playerSprite,
+  )
+  
 
   pg.init()
   pg.display.set_caption(GAME_NAME)
@@ -72,11 +92,17 @@ def init_pygame():
 def process_logic():
   """Runs _update()_ functions for objects.
   """
-  jea.init()
-  #note^ No clue why this doesn't work if it's in init_pygame()
+  
   barObj.update(screen, tick)
   currentMap.update(screen)
-  renderCharactersObj.updateCharacters(screen, tick)
+  renderCharactersObj.updateCharacters(screen, tick, playerSprite)
+
+
+#& ----------------------------------
+
+
+def init_justEnoughAssets():
+  jea.init()
 
 
 #& ----------------------------------
@@ -96,12 +122,14 @@ screen, clock = init_pygame()
 
 soundstatesObject.playSound()
 
+#& ===============================
 
 while True:
   keys = pg.key.get_pressed()
   tick = clock.tick(FPS)
 
 
+  init_justEnoughAssets()
   process_logic()
   draw_game()
 
@@ -113,8 +141,7 @@ while True:
 
 
   if DEBUG:
-    printMapstateDebug.printDebug()
     playerObj.printDebug()
     soundstatesObject.printDebug()
-    bartenderObj.printDebug(f"Bartender status: {bartenderObj.status}")
+    bartender_obj.printDebug(f"Bartender status: {bartender_obj.status}")
     print("========")

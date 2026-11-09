@@ -9,7 +9,6 @@ from libraries.justEnoughAssets import *
 
 #& ----------------------------------
 
-
 class defineObjects():
   def __init__(self):
     self._defineObjects()
@@ -23,13 +22,16 @@ class defineObjects():
     #* Creating maps / scenes
     title = maps.TitleScreen(pg.display.get_surface())
     bar = maps.barMap
+    # cave = maps.caveMap #!bug This needs every tile asset. So far, we just have the TMX file.
 
-#& ----------------------------------
-
+#&===============================================
 class currentMap:
   def __init__(self):
     self.mapstate = "bar"
 
+#&--------------------------------------------------------
+
+#* Update
   def update(self, screen):
     """Uses a switch statement to switch maps and render them using their corresponding drawMap(_screen_) function
 
@@ -45,10 +47,3 @@ class currentMap:
         cave.drawMap(screen)
       case "jungle":
         pass
-
-
-
-class PrintDebug:
-  @staticmethod
-  def printDebug():
-    print(f"Current Map: {currentMapObj.mapstate}")
