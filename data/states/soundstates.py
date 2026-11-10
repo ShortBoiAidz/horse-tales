@@ -1,8 +1,7 @@
 import pygame as pg
 
 from data.states import mapstates
-from data.components import sounds, characters
-from libraries import justEnoughAssets as jea
+from data.components import sounds
 
 class checkSounds():
   def __init__(self):

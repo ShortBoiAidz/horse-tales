@@ -5,7 +5,7 @@ import random
 
 from data.components import sounds
 from data.states import mapstates
-from libraries import justEnoughAssets as jea
+from JustEnoughAssets import *
 
 #& ----------------------------------
 
@@ -19,7 +19,7 @@ screen = pg.display.set_mode([800, 800])
 
 class RenderCharacters():
   def __init__(self) :
-    self.Prank = self.danielPrank = jea.Character(
+    self.Prank = self.danielPrank = Character(
                                     character="danielPrank",
                                     x=560, y=147,
                                     pathToImg="assets/textures/characters/danielPrank",
@@ -30,7 +30,7 @@ class RenderCharacters():
                                     themeMusicVolume=1.5
                                     )
 
-    self.bartenderObj = jea.Character(
+    self.bartenderObj = Character(
                                     character="bartender",
                                     x=310, y=170,
                                     pathToImg="assets/textures/characters/bartender",

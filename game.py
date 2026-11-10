@@ -5,8 +5,7 @@
 
 from data.states import mapstates, soundstates
 from data.components import characters, maps
-from libraries import justEnoughAssets as jea
-
+import JustEnoughAssets as JEA
 
 import pygame as pg
 import sys
@@ -65,13 +64,13 @@ def init_pygame():
 
 
   #* Proximity Detection
-  bartender_obj.proximity = jea.Proximity(
+  bartender_obj.proximity = JEA.Proximity(
     bartender_obj,
     coordinates=(334, 189),
     interactionRange=110,
     player=playerSprite,
   )
-  danielPrank_obj.proximity = jea.Proximity(
+  danielPrank_obj.proximity = JEA.Proximity(
     danielPrank_obj,
     coordinates=(630, 170),
     interactionRange=100,
@@ -102,7 +101,7 @@ def process_logic():
 
 
 def init_justEnoughAssets():
-  jea.init()
+  JEA.init()
 
 
 #& ----------------------------------
