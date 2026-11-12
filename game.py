@@ -18,7 +18,7 @@ WIDTH, HEIGHT = 800, 800
 GAME_NAME = "Horse Tale"
 DEBUG = True
 HITBOX = True
-FPS = 30
+FPS = 24
 
 
 #& ----------------------------------
