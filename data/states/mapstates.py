@@ -1,10 +1,9 @@
 import pygame as pg
 
-from data.components import maps, sounds
+from data.components import maps
 from data.states import soundstates
 
 from libraries.PygameTkinterGUITools import *
-from libraries.justEnoughAssets import *
 
 
 #& ----------------------------------

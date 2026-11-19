@@ -53,17 +53,11 @@ class Player(pg.sprite.Sprite):
     if left:
       self.x -= self.speed * tick / 1000
       self.facingLeft = True
-
-
     elif right:
       self.x += self.speed * tick / 1000
       self.facingLeft = False
-
-
     elif up:
       self.y -= self.speed * tick / 1000
-
-
     elif down:
       self.y += self.speed * tick / 1000
 
