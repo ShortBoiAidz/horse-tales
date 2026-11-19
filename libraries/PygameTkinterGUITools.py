@@ -1,0 +1,13427 @@
+"""
+PygameTkinterGUITools
+=====================
+Helper objects for making games and GUIs in pygame.
+Written by Adam Fox (Greater Shepparton Secondary College).
+© 2026 State of Victoria (Department of Education). MIT Licence - see LICENSE.
+
+GUI widgets work like tkinter / ttk:
+    Label, Button, TextBox, Checkbutton, Radiobutton, Scale, Spinbox,
+    Listbox, Message, Progressbar, Combobox, Separator,
+    Frame, LabelFrame, Notebook, Popup
+    MessageBox, askyesno, askstring, askinteger ... (question boxes)
+    Dialogue                                   (conversations with choices)
+    IntVar, StringVar, BooleanVar, DoubleVar   (shared values)
+    Style                                      (colours and fonts for everything)
+Game helpers: Animator, SpriteObject, Camera, ZoomCamera, TiledMap, World,
+JoystickManager, KeyboardInput, MouseInput, Grid, DragObject, DragGroup,
+Tooltip.
+Windows extras: AppWindow (see-through, always on top, drag to move),
+GlobalKeys (hotkeys that work while another program is in front).
+Movement: Path, PathFollower, Patrol, NavGrid, Chaser, line_of_sight,
+TopDownBody, PlatformerBody, MovingPlatform.
+Game structure: Scenes, Scene, after, after_repeat, after_cancel, Countdown,
+save_data, load_data, HighScores, Debug.
+Layout (like tkinter): widget.grid() / pack() / place(), Root.
+Combat: Health, HeartsBar, Projectile, ProjectileGroup, Shooter, flash, blink,
+knockback, camera.shake.
+Spawning: Spawner (enemies / coins every few seconds), Waves.
+More widgets: ScrolledFrame, Table (with tree view and editing), Menu.
+Effects: ParticleEmitter, Particles (ready-made effects). Chain (snakes, followers).
+Sound: init_audio, Audio, SoundEffect, Music.
+
+Every object uses the same methods, so they all go in the same place in
+your game loop:
+    obj.handle_event(event)   -> in handle_inputs()
+    obj.update(tick)          -> in update(tick)
+    obj.draw(screen)          -> in draw_game()
+
+Option names follow tkinter:
+    text, fg (text colour), bg (background colour), command (function to run),
+    font_name, font_size, font_style, border_color, border_width
+Fonts: font_name can be an installed font ("Arial"), a font file in your
+game folder ("assets/fonts/pixel.ttf") or a name from add_font().
+font_style can be "bold", "italic", "underline" or a mix ("bold italic").
+Colour options use the US spelling "color" but "colour" also works,
+e.g. border_color= or border_colour=.
+Options you leave out come from the Style (see the Style class).
+"""
+import sys
+import pygame as pg
+
+# Some common colours
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+
+
+# ================================
+# Helper functions
+# ================================
+
+_font_cache = {}
+_image_cache = {}
+_fit_cache = {}
+_font_files = {}        # short names given to font files with add_font()
+
+# A font_name ending in one of these is a font FILE, not an installed font
+FONT_FILE_TYPES = (".ttf", ".otf", ".ttc", ".fon")
+
+
+def _convert_alpha(surface):
+    """Use the display's pixel format when available; image loads work without it."""
+    return surface.convert_alpha() if pg.display.get_surface() is not None else surface
+
+
+def add_font(name, filename):
+    """
+    Give a font file a short name, so you can use it anywhere.
+
+        add_font("pixel", "assets/fonts/PressStart2P.ttf")
+        Label(20, 20, "Score: 0", font_name="pixel")
+        Style().configure(".", font_name="pixel")      # every widget
+
+    A font file in your game folder works on every computer, even ones
+    that don't have the font installed (like school computers).
+    """
+    _font_files[name.lower()] = filename
+    if _find_font_file(filename) is None:
+        _warn_once(f"Font file '{filename}' not found - add_font('{name}', ...) "
+                   f"will use the default font. Check the spelling and that the "
+                   f"file is in your game folder.")
+
+
+def list_fonts():
+    """
+    Return the names of the fonts installed on THIS computer, e.g.
+    print(list_fonts()). Another computer may have different fonts, so
+    for a game you share, put a font file in your game folder instead.
+    """
+    if not pg.font.get_init():
+        pg.font.init()
+    return sorted(pg.font.get_fonts())
+
+
+def _find_font_file(filename):
+    """
+    Find a font file: first from the current folder, then from the
+    game's own folder. The second try means it still works when Visual
+    Studio or IDLE starts the game from a different folder.
+    Returns the path, or None if the file isn't in either place.
+    """
+    import os
+    if os.path.isfile(filename):
+        return filename
+    in_game_folder = os.path.join(game_folder(), filename)
+    if os.path.isfile(in_game_folder):
+        return in_game_folder
+    return None
+
+
+def _style_words(font_style):
+    """
+    "bold italic" -> ("bold", "italic"). The words are the same as
+    tkinter's: bold, italic, underline, overstrike (a line through the
+    text). "normal" and None mean plain text.
+    """
+    if not font_style:
+        return ()
+    words = []
+    for word in str(font_style).lower().replace(",", " ").split():
+        if word in ("bold", "italic", "underline", "overstrike"):
+            if word not in words:
+                words.append(word)
+        elif word not in ("normal", "roman"):
+            _warn_once(f"font_style '{word}' isn't a style - use bold, italic, "
+                       f"underline or overstrike (e.g. font_style=\"bold italic\").")
+    return tuple(sorted(words))
+
+
+def _make_font(font_name, font_size, words):
+    """Make a new pygame font (get_font() keeps it, so this runs once)."""
+    bold, italic = "bold" in words, "italic" in words
+    if font_name is None:
+        font = pg.font.SysFont(None, font_size, bold, italic)
+    else:
+        name = str(font_name)
+        filename = _font_files.get(name.lower())
+        if filename is None and name.lower().endswith(FONT_FILE_TYPES):
+            filename = name
+        if filename is not None:
+            # A font FILE (e.g. "assets/fonts/pixel.ttf")
+            path = _find_font_file(filename)
+            font = None
+            if path is None:
+                _warn_once(f"Font file '{filename}' not found - using the default "
+                           f"font. Check the spelling and that the file is in your "
+                           f"game folder.")
+            else:
+                try:
+                    font = pg.font.Font(path, font_size)
+                    font.size("A")      # a broken file only fails when it is used
+                except (OSError, pg.error):
+                    font = None
+                    _warn_once(f"Font file '{filename}' couldn't be opened - using "
+                               f"the default font. Is it really a .ttf / .otf file?")
+            if font is None:
+                font = pg.font.SysFont(None, font_size)
+            # A file only has one look, so pygame leans / thickens it itself
+            font.set_bold(bold)
+            font.set_italic(italic)
+        else:
+            # An installed font (e.g. "Arial"). pygame quietly uses its own
+            # font if it isn't on this computer, so say so.
+            if pg.font.match_font(name) is None:
+                _warn_once(f"Font '{name}' isn't installed on this computer - using "
+                           f"the default font. Tip: put the .ttf file in your game "
+                           f"folder and use font_name=\"myfont.ttf\" so it works on "
+                           f"every computer (print(list_fonts()) shows what is "
+                           f"installed).")
+            font = pg.font.SysFont(name, font_size, bold, italic)
+    font.set_underline("underline" in words)
+    if "overstrike" in words and hasattr(font, "set_strikethrough"):
+        font.set_strikethrough(True)        # needs pygame 2.0.2 or newer
+    return font
+
+
+def get_font(font_name=None, font_size=24, font_style=None):
+    """
+    Return a pygame font. Fonts are made once and then reused,
+    because making a new font every frame is slow.
+
+        font_name  - None (pygame's default font), an installed font like
+                     "Arial", a font file like "assets/fonts/pixel.ttf",
+                     or a name given to a file with add_font()
+        font_size  - size in pixels
+        font_style - None, or "bold", "italic", "underline", "overstrike",
+                     or a mix like "bold italic"
+
+    A font that can't be found never crashes the game: it prints a
+    warning (once) and uses the default font instead.
+    """
+    if not pg.font.get_init():
+        pg.font.init()          # works even if pg.init() was forgotten
+    words = _style_words(font_style)
+    key = (font_name, font_size) if not words else (font_name, font_size, words)
+    if key not in _font_cache:
+        _font_cache[key] = _make_font(font_name, font_size, words)
+    return _font_cache[key]
+
+
+def load_image(image, size=None):
+    """
+    Return a Surface from a filename or Surface, scaled to size if given.
+    Images are loaded once and then reused.
+    """
+    if image is None:
+        return None
+    key = (image if isinstance(image, str) else id(image), size)
+    if key not in _image_cache:
+        surface = _convert_alpha(pg.image.load(image)) if isinstance(image, str) else image
+        if size and surface.get_size() != tuple(size):
+            surface = pg.transform.scale(surface, (int(size[0]), int(size[1])))
+        _image_cache[key] = surface
+    return _image_cache[key]
+
+
+def _fit_text(font, text, width):
+    """
+    Return text cut down to fit in width pixels, ending in "..." if it was cut.
+    (Used by Combobox and Table, so long words never spill out of their box.)
+    Answers are remembered, because measuring text every frame is slow.
+    """
+    text = str(text)
+    key = (id(font), text, width)
+    if key in _fit_cache:
+        return _fit_cache[key]
+    if font.size(text)[0] <= width:
+        fitted = text
+    else:
+        # Take letters off the end until the text and "..." fit.
+        # (A binary search: try half, then a quarter... so long text stays fast)
+        low, high = 0, len(text)
+        while low < high:
+            middle = (low + high + 1) // 2
+            if font.size(text[:middle].rstrip() + "...")[0] <= width:
+                low = middle
+            else:
+                high = middle - 1
+        fitted = text[:low].rstrip() + "..." if font.size("...")[0] <= width else ""
+    if len(_fit_cache) > 5000:          # don't let it grow forever
+        _fit_cache.clear()
+    _fit_cache[key] = fitted
+    return fitted
+
+
+def _pick(*values):
+    """Return the first value that is not None (used for color / colour)."""
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def draw_text(screen, text, x, y, fg=WHITE, font_size=24, font_name=None,
+              center=False, font_style=None):
+    """
+    Draw text on the screen in one line of code.
+
+    Parameters:
+        screen    - the pygame Surface to draw on
+        text      - the words to show (string)
+        x, y      - position (top-left, or the centre if center=True)
+        fg        - text colour, e.g. (255, 255, 255)
+        font_size - size of the text (int)
+        font_name - optional font: "Arial", a file like "assets/my.ttf",
+                    or a name from add_font()
+        center    - if True, the text is centred on (x, y)
+        font_style - optional "bold", "italic", "underline" or a mix
+    """
+    surface = get_font(font_name, font_size, font_style).render(str(text), True, fg)
+    rect = surface.get_rect()
+    if center:
+        rect.center = (x, y)
+    else:
+        rect.topleft = (x, y)
+    screen.blit(surface, rect)
+
+
+# ================================
+# Variables (like tkinter IntVar, StringVar...)
+# ================================
+
+class Variable:
+    """
+    A value that widgets can share, like tkinter's variables.
+    When one widget changes it, every widget using it shows the new value.
+
+        volume = IntVar(50)
+        Scale(50, 100, variable=volume)
+        Label(50, 150, textvariable=volume)
+        print(volume.get())
+        volume.set(75)
+
+    trace_add("write", function) runs function() whenever the value changes.
+    """
+
+    def __init__(self, value=None):
+        self._value = self._convert(value if value is not None else self._default)
+        self._callbacks = []
+
+    _default = ""
+
+    def _convert(self, value):
+        return value
+
+    def get(self):
+        return self._value
+
+    def set(self, value):
+        value = self._convert(value)
+        if value != self._value:
+            self._value = value
+            for callback in self._callbacks:
+                callback()
+
+    def trace_add(self, mode, callback):
+        """Run callback() whenever the value is changed (mode is "write")."""
+        self._callbacks.append(callback)
+
+    def __str__(self):
+        return str(self._value)
+
+
+class StringVar(Variable):
+    """Holds text."""
+    _default = ""
+
+    def _convert(self, value):
+        return str(value)
+
+
+class IntVar(Variable):
+    """Holds a whole number."""
+    _default = 0
+
+    def _convert(self, value):
+        return int(round(float(value)))
+
+
+class DoubleVar(Variable):
+    """Holds a decimal number."""
+    _default = 0.0
+
+    def _convert(self, value):
+        return float(value)
+
+
+class BooleanVar(Variable):
+    """Holds True or False."""
+    _default = False
+
+    def _convert(self, value):
+        return bool(value)
+
+
+# ================================
+# Style (like ttk.Style)
+# ================================
+
+# Built-in looks. "." means every widget.
+THEMES = {
+    "light": {
+        ".": {"fg": WHITE, "bg": (60, 60, 60), "font_name": None, "font_size": 24,
+              "font_style": None,
+              "border_color": (200, 200, 200), "border_width": 0, "border_radius": 0,
+              "accent": (100, 150, 255), "trough_color": (90, 90, 90),
+              "focus_color": (255, 200, 0), "select_bg": (100, 150, 255),
+              "select_fg": WHITE, "disabled_fg": (140, 140, 140)},
+        "Label": {"bg": None, "outline_color": BLACK, "shadow_color": (0, 0, 0, 160)},
+        "Message": {"bg": None},
+        "Button": {"fg": BLACK, "bg": (100, 150, 255), "hover_bg": (150, 200, 255),
+                   "font_size": 30, "border_color": None,
+                   "shadow_color": (0, 0, 0, 100)},
+        "TextBox": {"fg": BLACK, "bg": (230, 230, 230), "border_color": (100, 100, 100),
+                    "label_fg": WHITE, "placeholder_fg": (140, 140, 140)},
+        "Checkbutton": {"bg": None, "box_bg": WHITE, "check_color": (40, 120, 220)},
+        "Radiobutton": {"bg": None, "box_bg": WHITE, "check_color": (40, 120, 220)},
+        "Scale": {"bg": None},
+        "Spinbox": {"fg": BLACK, "bg": (230, 230, 230), "border_color": (100, 100, 100),
+                    "button_bg": (190, 190, 200)},
+        "Listbox": {"fg": BLACK, "bg": (230, 230, 230), "border_color": (100, 100, 100)},
+        "Combobox": {"fg": BLACK, "bg": (230, 230, 230), "border_color": (100, 100, 100)},
+        "Progressbar": {"bar_color": (80, 200, 120), "border_color": (200, 200, 200),
+                        "border_width": 2, "ghost_color": (250, 235, 170)},
+        "Separator": {"fg": (150, 150, 150)},
+        "Frame": {"bg": (60, 60, 60), "border_width": 2},
+        "LabelFrame": {"bg": None, "border_width": 2},
+        "Root": {"bg": None, "border_width": 0},
+        "ScrolledFrame": {"bg": (50, 50, 60), "border_width": 2},
+        "Table": {"fg": BLACK, "bg": (235, 235, 240), "border_color": (100, 100, 100),
+                  "heading_bg": (190, 190, 205)},
+        "Menu": {"fg": BLACK, "bg": (235, 235, 240), "border_color": (120, 120, 130),
+                 "select_bg": (100, 150, 255), "select_fg": WHITE, "font_size": 22},
+        "Notebook": {"bg": (60, 60, 60), "tab_bg": (90, 90, 90), "border_width": 2},
+        "Popup": {"fg": BLACK, "bg": (240, 240, 240), "border_color": BLACK,
+                  "border_width": 2, "title_font_size": 24, "title_font_name": None,
+                  "title_font_style": None},
+        "HeartsBar": {"heart_color": (220, 40, 60), "empty_color": (70, 70, 80),
+                      "border_color": BLACK, "border_width": 2},
+        "Dialogue": {"fg": WHITE, "bg": (30, 30, 45), "name_fg": (255, 210, 80),
+                     "name_bg": None, "border_color": WHITE, "border_width": 3,
+                     "border_radius": 10, "font_size": 28},
+    },
+    "dark": {
+        ".": {"fg": (230, 230, 240), "bg": (40, 40, 50), "border_color": (90, 90, 110),
+              "accent": (110, 140, 255), "trough_color": (25, 25, 32),
+              "select_bg": (80, 100, 200)},
+        "Button": {"fg": (230, 230, 240), "bg": (60, 70, 110), "hover_bg": (85, 100, 160),
+                   "border_radius": 6},
+        "TextBox": {"fg": (230, 230, 240), "bg": (25, 25, 32), "border_color": (90, 90, 110),
+                    "label_fg": (230, 230, 240)},
+        "Checkbutton": {"box_bg": (25, 25, 32), "check_color": (110, 140, 255)},
+        "Radiobutton": {"box_bg": (25, 25, 32), "check_color": (110, 140, 255)},
+        "Spinbox": {"fg": (230, 230, 240), "bg": (25, 25, 32), "button_bg": (60, 70, 110)},
+        "Listbox": {"fg": (230, 230, 240), "bg": (25, 25, 32)},
+        "Combobox": {"fg": (230, 230, 240), "bg": (25, 25, 32)},
+        "Table": {"fg": (230, 230, 240), "bg": (25, 25, 32), "heading_bg": (60, 70, 110)},
+        "Menu": {"fg": (230, 230, 240), "bg": (35, 35, 45), "border_color": (90, 90, 110)},
+        "ScrolledFrame": {"bg": (35, 35, 45)},
+        "Frame": {"bg": (40, 40, 50)},
+        "Notebook": {"bg": (40, 40, 50), "tab_bg": (60, 60, 80)},
+        "Popup": {"fg": (230, 230, 240), "bg": (50, 50, 64), "border_color": (110, 140, 255)},
+        "Dialogue": {"fg": (230, 230, 240), "bg": (25, 25, 32), "name_fg": (150, 175, 255),
+                     "border_color": (110, 140, 255)},
+    },
+    "retro": {
+        ".": {"fg": (255, 255, 255), "bg": (0, 0, 0), "border_color": (255, 255, 255),
+              "border_width": 2, "border_radius": 0, "accent": (255, 60, 160),
+              "trough_color": (40, 40, 40), "focus_color": (0, 255, 255),
+              "select_bg": (255, 60, 160)},
+        "Button": {"fg": (255, 255, 255), "bg": (0, 0, 0), "hover_bg": (255, 60, 160),
+                   "border_color": (255, 255, 255), "border_width": 3},
+        "TextBox": {"fg": (0, 255, 0), "bg": (0, 0, 0), "border_color": (255, 255, 255),
+                    "label_fg": (255, 255, 255)},
+        "Checkbutton": {"box_bg": (0, 0, 0), "check_color": (0, 255, 0)},
+        "Radiobutton": {"box_bg": (0, 0, 0), "check_color": (0, 255, 0)},
+        "Spinbox": {"fg": (0, 255, 0), "bg": (0, 0, 0), "button_bg": (255, 60, 160)},
+        "Listbox": {"fg": (0, 255, 0), "bg": (0, 0, 0)},
+        "Combobox": {"fg": (0, 255, 0), "bg": (0, 0, 0)},
+        "Table": {"fg": (0, 255, 0), "bg": (0, 0, 0), "heading_bg": (40, 40, 40)},
+        "Menu": {"fg": (255, 255, 255), "bg": (0, 0, 0), "border_color": (255, 60, 160)},
+        "ScrolledFrame": {"bg": (0, 0, 0)},
+        "Progressbar": {"bar_color": (255, 60, 160), "border_color": (255, 255, 255)},
+        "Frame": {"bg": (0, 0, 0)},
+        "Notebook": {"bg": (0, 0, 0), "tab_bg": (40, 40, 40)},
+        "Popup": {"fg": (255, 255, 255), "bg": (0, 0, 0), "border_color": (255, 60, 160)},
+        "HeartsBar": {"heart_color": (255, 60, 160), "empty_color": (40, 40, 40),
+                      "border_color": (255, 255, 255)},
+        "Dialogue": {"fg": (255, 255, 255), "bg": (0, 0, 0), "name_fg": (0, 255, 255),
+                     "border_color": (255, 255, 255), "border_radius": 0},
+    },
+    # Easy to see: black and white with bright yellow, thick borders and a
+    # slightly bigger font. Good for players with low vision and projectors.
+    "high_contrast": {
+        ".": {"fg": WHITE, "bg": BLACK, "font_size": 26, "border_color": WHITE,
+              "border_width": 3, "border_radius": 0, "accent": (255, 230, 0),
+              "trough_color": (60, 60, 60), "focus_color": (0, 255, 255),
+              "select_bg": (255, 230, 0), "select_fg": BLACK,
+              "disabled_fg": (170, 170, 170)},
+        "Label": {"outline_color": BLACK},
+        "Button": {"fg": BLACK, "bg": (255, 230, 0), "hover_bg": WHITE,
+                   "active_bg": (0, 255, 255), "font_size": 32, "border_color": WHITE,
+                   "border_width": 3},
+        "TextBox": {"fg": BLACK, "bg": WHITE, "border_color": (255, 230, 0),
+                    "label_fg": WHITE, "placeholder_fg": (90, 90, 90)},
+        "Checkbutton": {"box_bg": WHITE, "check_color": BLACK},
+        "Radiobutton": {"box_bg": WHITE, "check_color": BLACK},
+        "Spinbox": {"fg": BLACK, "bg": WHITE, "border_color": (255, 230, 0),
+                    "button_bg": (255, 230, 0)},
+        "Listbox": {"fg": BLACK, "bg": WHITE, "border_color": (255, 230, 0)},
+        "Combobox": {"fg": BLACK, "bg": WHITE, "border_color": (255, 230, 0)},
+        "Progressbar": {"bar_color": (255, 230, 0), "border_color": WHITE,
+                        "border_width": 3, "ghost_color": WHITE},
+        "Separator": {"fg": WHITE},
+        "Frame": {"bg": BLACK, "border_width": 3},
+        "LabelFrame": {"border_width": 3},
+        "ScrolledFrame": {"bg": BLACK, "border_width": 3},
+        "Table": {"fg": BLACK, "bg": WHITE, "border_color": (255, 230, 0),
+                  "heading_bg": (255, 230, 0)},
+        "Menu": {"fg": BLACK, "bg": WHITE, "border_color": BLACK, "font_size": 24,
+                 "select_bg": BLACK, "select_fg": (255, 230, 0)},
+        "Notebook": {"bg": BLACK, "tab_bg": (60, 60, 60), "border_width": 3},
+        "Popup": {"fg": WHITE, "bg": BLACK, "border_color": (255, 230, 0),
+                  "border_width": 4, "title_font_size": 28},
+        "HeartsBar": {"heart_color": (255, 230, 0), "empty_color": (60, 60, 60),
+                      "border_color": WHITE},
+        "Dialogue": {"fg": WHITE, "bg": BLACK, "name_fg": (255, 230, 0),
+                     "border_color": (255, 230, 0), "border_width": 4,
+                     "border_radius": 0, "font_size": 30},
+    },
+}
+
+
+class Style:
+    """
+    Sets the colours and fonts of every widget in one place (like ttk.Style).
+
+        style = Style()
+        style.theme_use("dark")       # "light", "dark", "retro", "high_contrast"
+        style.configure("Button", bg=(200, 50, 50), border_radius=10)
+        style.configure(".", font_name="Arial")          # "." = every widget
+        style.configure("Danger.Button", bg=(255, 0, 0)) # a named style...
+        Button(10, 10, 100, 40, "Quit", style="Danger.Button")   # ...used here
+
+    ttk names like "TButton" also work. Options given to a widget itself
+    always win over the Style. Changes show straight away, even on widgets
+    that already exist.
+    """
+
+    _theme = "light"
+    _settings = {}        # shared by every Style object, like ttk
+
+    @staticmethod
+    def _name(name):
+        """'TButton' -> 'Button', 'Danger.TButton' -> 'Danger.Button'."""
+        parts = name.split(".")
+        last = parts[-1]
+        if len(last) > 1 and last[0] == "T" and last[1].isupper():
+            parts[-1] = last[1:]
+        return ".".join(parts) if name != "." else "."
+
+    def configure(self, style_name, **options):
+        """Set options for a widget type, e.g. configure("Button", bg=(0, 0, 0))."""
+        options = {k.replace("colour", "color"): v for k, v in options.items()}
+        Style._settings.setdefault(self._name(style_name), {}).update(options)
+
+    def theme_use(self, theme_name=None):
+        """Switch to a built-in theme, or return the current theme's name."""
+        if theme_name is None:
+            return Style._theme
+        if theme_name not in THEMES:
+            raise ValueError(f"No theme called '{theme_name}'. "
+                             f"Choose from: {', '.join(THEMES)}")
+        Style._theme = theme_name
+
+    def theme_names(self):
+        return list(THEMES)
+
+    def reset(self):
+        """Forget every configure() and go back to the light theme."""
+        Style._settings = {}
+        Style._theme = "light"
+
+    @classmethod
+    def lookup(cls, style_names, option):
+        """Find an option: your configure() first, then the theme, then "light"."""
+        theme_order = [THEMES[cls._theme]]
+        if cls._theme != "light":
+            theme_order.append(THEMES["light"])
+        # The most specific name wins (e.g. "Label" before "." for every widget)
+        for name in list(style_names) + ["."]:
+            for source in [cls._settings] + theme_order:
+                if option in source.get(name, {}):
+                    return source[name][option]
+        return None
+
+
+# ================================
+# Widget base class
+# ================================
+
+class Widget:
+    """
+    The base for every GUI object. You don't make a Widget yourself -
+    every widget is built on it, so they all share these methods:
+
+        draw(screen, offset=(0, 0))          draw it
+        handle_event(event, offset=(0, 0))   react to the mouse (returns True if used)
+        update(tick)                         animate it
+        config(option=value, ...)            change options (like tkinter)
+        cget("option")                       read an option (including Style values)
+        show(), hide(), toggle_visibility()
+        show(fade_ms=300), hide(fade_ms=300) fade in / out (Frames, Popups and
+                                             other containers - see below)
+        slide_to(x, y, ms=300)               glide smoothly to a new position
+
+    Options you leave out (None) come from the Style.
+    offset is added to the position. Frames and Popups use it to move
+    their children; you normally leave it out.
+    state="disabled" greys the widget out and stops it reacting.
+    cursor="hand" changes the mouse pointer while it is over the widget
+    (every widget has this option - see the Cursor class).
+
+    Fades and slides use the clock, so they need no update(tick) and keep
+    working while timers are paused (e.g. a pause menu). Fades show on
+    containers (Frame, LabelFrame, ScrolledFrame, Notebook, Popup,
+    MessageBox); other widgets just show / hide straight away.
+    slide_to() is for widgets placed with x, y (not grid / pack / place).
+    """
+
+    _fade = None            # (start time, ms, "in" or "out") while fading
+    _slide = None           # (start time, ms, from x, from y, to x, to y) while sliding
+    _in_fade_layer = False
+
+    def __init__(self, x, y, width=0, height=0, center=False, visible=True,
+                 style=None, state="normal"):
+        # tkinter style: Label(menu, text="Hi") - the first value is the parent
+        parent = None
+        if isinstance(x, Container):
+            parent, x, y = x, 0, 0
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.center = center
+        self.visible = visible
+        self.style = style
+        self.state = state
+        self.focused = False        # set by FocusGroup
+        self.parent = None          # the Frame / Notebook / Popup it is in
+        self._last_offset = (0, 0)  # where it was last drawn (used by FocusGroup)
+        self.cursor = None          # mouse pointer while over it, e.g. "hand" (see Cursor)
+        self._layout = None         # ("grid" / "pack" / "place", options)
+        self._layout_size = None    # size given by a layout (sticky / fill)
+        self._made_in_parent = parent is not None
+        if parent is not None:
+            parent.add(self)
+
+    # ---- position ----
+    @property
+    def rect(self):
+        """The widget's rectangle (without any offset)."""
+        return self.get_rect()
+
+    def get_rect(self, offset=(0, 0)):
+        """The widget's rectangle on screen, after adding offset."""
+        if self._slide is not None:
+            self._move_slide()
+        w, h = self._layout_size or (self.width, self.height)
+        r = pg.Rect(0, 0, w, h)
+        position = (self.x + offset[0], self.y + offset[1])
+        if self.center:
+            r.center = position
+        else:
+            r.topleft = position
+        return r
+
+    # ---- showing and hiding ----
+    def show(self, fade_ms=0):
+        """Show the widget. fade_ms=300 fades it in (containers only)."""
+        self.visible = True
+        if fade_ms and isinstance(self, Container):
+            self._fade = (pg.time.get_ticks(), fade_ms, "in")
+        else:
+            self._fade = None
+
+    def hide(self, fade_ms=0):
+        """
+        Hide the widget. fade_ms=300 fades it out first (containers only);
+        it stops taking clicks straight away and is hidden at the end.
+        """
+        if fade_ms and self.visible and isinstance(self, Container):
+            self._fade = (pg.time.get_ticks(), fade_ms, "out")
+        else:
+            self.visible = False
+            self._fade = None
+
+    def toggle_visibility(self, fade_ms=0):
+        """Hide it if it is showing, show it if it is hidden (or fading out)."""
+        if not fade_ms:                       # the v1.0 way
+            self.visible = not self.visible
+            self._fade = None
+        elif self.visible and not self.closing:
+            self.hide(fade_ms)
+        else:
+            self.show(fade_ms)
+
+    @property
+    def closing(self):
+        """True while it is fading out after hide(fade_ms=...)."""
+        return self._fade is not None and self._fade[2] == "out"
+
+    def _fade_alpha(self):
+        """How see-through it is right now (0 - 255), or None if not fading."""
+        if self._fade is None:
+            return None
+        start, ms, direction = self._fade
+        t = (pg.time.get_ticks() - start) / ms
+        if t >= 1:                            # finished
+            self._fade = None
+            if direction == "out":
+                self.visible = False
+            return None
+        return int(255 * t) if direction == "in" else int(255 * (1 - t))
+
+    def _fade_layer(self, screen, offset):
+        """
+        While fading: draw the widget onto a see-through layer, then put that
+        on the screen partly see-through. Returns True if it drew (or the
+        fade-out has just finished), so draw() can stop there.
+        """
+        if self._in_fade_layer:
+            return False
+        alpha = self._fade_alpha()
+        if alpha is None:
+            return not self.visible           # a fade-out has just finished
+        layer = pg.Surface(screen.get_size(), pg.SRCALPHA)
+        self._in_fade_layer = True
+        try:
+            self.draw(layer, offset)
+        finally:
+            self._in_fade_layer = False
+        layer.set_alpha(alpha)
+        screen.blit(layer, (0, 0))
+        return True
+
+    def slide_to(self, x, y, ms=300):
+        """Glide smoothly to (x, y) over ms milliseconds (fast, then slowing down)."""
+        self._slide = (pg.time.get_ticks(), max(1, ms), self.x, self.y, x, y)
+
+    @property
+    def sliding(self):
+        """True while slide_to() is still moving it."""
+        return self._slide is not None
+
+    def _move_slide(self):
+        start, ms, from_x, from_y, to_x, to_y = self._slide
+        t = min(1.0, (pg.time.get_ticks() - start) / ms)
+        ease = 1 - (1 - t) ** 2               # "ease out": slows down at the end
+        self.x = round(from_x + (to_x - from_x) * ease)
+        self.y = round(from_y + (to_y - from_y) * ease)
+        if t >= 1:
+            self._slide = None
+
+    @property
+    def showing(self):
+        """True if the widget and everything it is inside are visible."""
+        if not self.visible:
+            return False
+        return self.parent is None or self.parent._child_showing(self)
+
+    def _child_showing(self, child):
+        return self.showing
+
+    @property
+    def active(self):
+        """True if the widget can be used (showing and not disabled)."""
+        return self.showing and self.state != "disabled"
+
+    # ---- options ----
+    def _style_names(self):
+        """Style names to look in, e.g. ["Danger.Button", "Button"]."""
+        names = []
+        if self.style:
+            names.append(Style._name(self.style))
+        for cls in type(self).__mro__:
+            if cls is Widget:
+                break
+            names.append(cls.__name__)
+        return names
+
+    def cget(self, option):
+        """Return an option's value: the widget's own, or else the Style's."""
+        option = option.replace("colour", "color")
+        value = getattr(self, option, None)
+        if value is not None:
+            return value
+        return Style.lookup(self._style_names(), option)
+
+    def config(self, **options):
+        """
+        Change options after the widget is made, like tkinter.
+        Example: score_label.config(text="Score: 10", fg=(255, 0, 0))
+        Set an option to None to go back to the Style's value.
+        """
+        for name, value in options.items():
+            name = name.replace("colour", "color")
+            if not hasattr(self, name):
+                raise ValueError(f"{type(self).__name__} has no option '{name}'")
+            setattr(self, name, value)
+            if name in ("width", "height") and hasattr(self, "_given_size"):
+                w, h = self._given_size
+                self._given_size = (value, h) if name == "width" else (w, value)
+        self._refresh()
+
+    configure = config      # tkinter has both names
+
+    def _refresh(self):
+        """Recalculate sizes after config(). Widgets override this."""
+        pass
+
+    def _font(self):
+        return get_font(self.cget("font_name"), self.cget("font_size"),
+                        self.cget("font_style"))
+
+    def _text_colour(self):
+        return self.cget("disabled_fg") if self.state == "disabled" else self.cget("fg")
+
+    # ---- layout managers (like tkinter) ----
+    def _check_layout(self, kind):
+        if self.parent is None:
+            raise LayoutError(
+                f"\n\n  >>> The mistake is in YOUR code: {_your_code()}\n"
+                f"  {type(self).__name__}.{kind}() needs a parent: make it with the "
+                f"Frame first, e.g. {type(self).__name__}(menu, ...)\n")
+        others = {c._layout[0] for c in self.parent.children
+                  if c is not self and c._layout and c._layout[0] in ("grid", "pack")}
+        if kind in ("grid", "pack") and others - {kind}:
+            raise LayoutError(
+                f"\n\n  >>> The mistake is in YOUR code: {_your_code()}\n"
+                f"  You can't use grid() and pack() in the same Frame (in tkinter this "
+                f"freezes your program).\n  Put the {kind}() widgets in their own Frame.\n")
+
+    def grid(self, row=0, column=0, rowspan=1, columnspan=1, sticky="", padx=0, pady=0):
+        """
+        Put the widget in a row and column of its Frame, like tkinter.
+        sticky: which sides to stick to, e.g. "w", "e", "ns", "nsew" (stretch).
+        padx / pady: space around it - a number, or (left, right) / (top, bottom).
+        Returns the widget, so  b = Button(menu, text="Go").grid(row=0)  works.
+        """
+        self._check_layout("grid")
+        self._layout = ("grid", dict(row=row, column=column, rowspan=rowspan,
+                                     columnspan=columnspan, sticky=sticky.lower(),
+                                     padx=padx, pady=pady))
+        return self
+
+    def pack(self, side="top", fill=None, expand=False, padx=0, pady=0, anchor="center"):
+        """
+        Stack the widget against a side of its Frame, like tkinter.
+        side: "top", "bottom", "left", "right"   fill: None, "x", "y", "both"
+        expand: True to share the spare space    anchor: "n", "w", "center"...
+        """
+        self._check_layout("pack")
+        self._layout = ("pack", dict(side=side, fill=fill, expand=expand, padx=padx,
+                                     pady=pady, anchor=anchor))
+        return self
+
+    def place(self, x=0, y=0, relx=0.0, rely=0.0, anchor="nw"):
+        """
+        Put the widget at an exact spot in its Frame, like tkinter.
+        relx / rely: 0.0 - 1.0 across / down the Frame (0.5 = middle).
+        anchor: which point of the widget goes there: "nw", "center", "se"...
+        """
+        self._check_layout("place")
+        self._layout = ("place", dict(x=x, y=y, relx=relx, rely=rely, anchor=anchor))
+        return self
+
+    def grid_forget(self):
+        """Take the widget out of the layout (it is hidden, like tkinter)."""
+        self._layout = None
+        self._layout_size = None
+
+    pack_forget = place_forget = grid_forget
+
+    def grid_info(self):
+        return dict(self._layout[1]) if self._layout and self._layout[0] == "grid" else {}
+
+    def pack_info(self):
+        return dict(self._layout[1]) if self._layout and self._layout[0] == "pack" else {}
+
+    def _describe(self):
+        """A short name for warnings, e.g. Label 'Name:'."""
+        words = getattr(self, "text", "") or getattr(self, "label", "") or ""
+        return f"{type(self).__name__} '{words}'" if words else type(self).__name__
+
+    # ---- keyboard focus (see FocusGroup) ----
+    takes_focus = False          # True for widgets you can use with keys
+
+    def focus_action(self, action):
+        """
+        Called by FocusGroup. action is "activate", "up", "down", "left" or
+        "right". Return True if the widget used it.
+        """
+        return False
+
+    def _draw_focus(self, screen, r):
+        if self.focused:
+            pg.draw.rect(screen, self.cget("focus_color"), r.inflate(8, 8), 3,
+                         border_radius=6)
+
+    def _drawn(self, screen, offset):
+        """
+        Called at the start of draw(). Remembers where the widget was drawn
+        (FocusGroup and Tooltip use this). Widgets with a cursor, and Popups,
+        also tell Cursor they are on screen this frame, so Cursor knows
+        which pointer to show when the mouse is over them.
+        """
+        self._last_offset = offset
+        if self.cursor is not None or isinstance(self, Popup):
+            Cursor._on_screen(self, offset, screen.get_clip())
+
+    # ---- game loop methods ----
+    def draw(self, screen, offset=(0, 0)):
+        pass
+
+    def handle_event(self, event, offset=(0, 0)):
+        return False
+
+    def update(self, tick):
+        pass
+
+
+class Debug:
+    """
+    One switch for every debug view: layout grids, paths, enemy ranges...
+
+        Debug.handle_event(event)    # in handle_inputs(): F1 turns it on / off
+        if Debug.on: ...             # draw your own debug things too
+    """
+
+    on = False
+    key = pg.K_F1
+
+    @classmethod
+    def toggle(cls):
+        cls.on = not cls.on
+        Path.show_all = cls.on
+
+    @classmethod
+    def handle_event(cls, event):
+        if event.type == pg.KEYDOWN and event.key == cls.key:
+            cls.toggle()
+            return True
+        return False
+
+
+class Layout:
+    """Shared layout settings. Layout warnings are printed once each."""
+    _printed = set()
+
+
+class LayoutError(Exception):
+    """A mistake using grid() / pack() / place()."""
+
+
+def _your_code():
+    """
+    The file and line in the student's program that called the library
+    (so error messages point at their mistake, not at this file).
+    """
+    import inspect
+    import os
+    this_file = os.path.abspath(__file__)
+    for frame in inspect.stack()[1:]:
+        if os.path.abspath(frame.filename) != this_file:
+            line = (frame.code_context or [""])[0].strip()
+            return f"{os.path.basename(frame.filename)}, line {frame.lineno}\n      {line}"
+    return "(unknown)"
+
+
+def _pads(value):
+    """padx=5 -> (5, 5); padx=(2, 8) -> (2, 8)."""
+    if isinstance(value, (tuple, list)):
+        return int(value[0]), int(value[1])
+    return int(value), int(value)
+
+
+def _scrollbar_rects(track, shown, total, scroll):
+    """(track, thumb) for a list showing `shown` of `total` items from `scroll`."""
+    thumb_h = max(14, track.height * shown // max(1, total))
+    most = max(1, total - shown)
+    thumb_y = track.y + (track.height - thumb_h) * scroll // most
+    return track, pg.Rect(track.x, thumb_y, track.width, thumb_h)
+
+
+def _scrollbar_event(widget, event, track, thumb, shown, total):
+    """
+    Mouse on a list's scroll bar: drag the thumb, or click the bar to jump a
+    page. Returns True if the scroll bar used the event. Changes widget.scroll.
+    """
+    most = max(0, total - shown)
+    if event.type == pg.MOUSEBUTTONDOWN and event.button == 1 and track.collidepoint(event.pos):
+        if thumb.collidepoint(event.pos):
+            widget._bar_drag = (event.pos[1], widget.scroll)
+        else:
+            page = shown if event.pos[1] > thumb.centery else -shown
+            widget.scroll = max(0, min(most, widget.scroll + page))
+        return True
+    if event.type == pg.MOUSEMOTION and getattr(widget, "_bar_drag", None):
+        start_y, start_scroll = widget._bar_drag
+        room = max(1, track.height - thumb.height)
+        moved = round((event.pos[1] - start_y) / room * most)
+        widget.scroll = max(0, min(most, start_scroll + moved))
+        return True
+    if event.type == pg.MOUSEBUTTONUP and getattr(widget, "_bar_drag", None):
+        widget._bar_drag = None
+        return True
+    return False
+
+
+def _clicked(event, rect):
+    """True if this event is a left click inside rect."""
+    return (event.type == pg.MOUSEBUTTONDOWN and event.button == 1
+            and rect.collidepoint(event.pos))
+
+
+# ================================
+# Label Class
+# ================================
+
+class Label(Widget):
+    """
+    Shows text on the screen (like tkinter's Label).
+
+    Parameters:
+        x, y         - position (top-left, or centre if center=True)
+        text         - the words to show
+        textvariable - a StringVar / IntVar to show instead of text
+        fg           - text colour
+        bg           - background colour behind the text (None = see-through)
+        image        - optional picture (filename or Surface) shown instead of text
+        font_name    - an installed font ("Arial"), a font file in your game
+                       folder ("assets/fonts/pixel.ttf"), or a name from add_font()
+        font_size    - size in pixels
+        font_style   - "bold", "italic", "underline", or a mix like "bold italic"
+        center       - if True, (x, y) is the centre of the label
+        style        - a named Style, e.g. "Title.Label"
+        outline      - thickness of an outline around the letters (0 = none),
+                       so text is easy to read over a busy game background
+        outline_color - outline colour (outline_colour also works)
+        shadow       - True to draw a shadow behind the text
+        shadow_offset - (x, y) distance of the shadow
+        shadow_color - shadow colour (shadow_colour also works)
+        justify      - "left", "center" or "right": how the lines line up
+                       when the text has more than one line
+
+    Long text (e.g. a song title that might not fit):
+        max_width    - the widest the text may be, in pixels (None = no limit)
+        overflow     - what to do when the text is wider than max_width:
+                       "shrink" (the default) makes the font smaller until it fits,
+                       "cut" ends the text with "...",
+                       "wrap" moves words onto more lines
+        min_font_size - the smallest "shrink" will go (default 10). Text that
+                       still doesn't fit is cut with "...".
+                       While shrunk, the label stays as tall as the full-size
+                       text, so the things below it don't jump up and down.
+        wraplength   - the tkinter name: wraplength=300 is the same as
+                       max_width=300, overflow="wrap"
+
+    Changing text smoothly:
+        fade_ms      - e.g. 400: when the text changes, the old text fades out
+                       while the new text fades in (0 = change straight away)
+
+    "\n" in the text starts a new line, like tkinter.
+
+    Example:
+        score = Label(20, 20, "Score: 0", fg=(255, 255, 0))
+        score.config(text="Score: 10")
+        title = Label(20, 60, "Level 1", font_size=48, outline=3)
+        help_text = Label(20, 120, "Arrows to move\nSpace to jump", justify="center")
+        song = Label(450, 60, title, font_size=48, center=True,
+                     max_width=820, overflow="shrink", fade_ms=400)
+    """
+
+    def __init__(self, x, y=0, text="", textvariable=None, fg=None, bg=None,
+                 image=None, font_name=None, font_size=None,
+                 center=False, visible=True, style=None,
+                 outline=0, outline_color=None, outline_colour=None,
+                 shadow=False, shadow_offset=(2, 2), shadow_color=None,
+                 shadow_colour=None, justify="left", cursor=None, font_style=None,
+                 max_width=None, overflow=None, min_font_size=10, wraplength=None,
+                 fade_ms=0):
+        super().__init__(x, y, center=center, visible=visible, style=style)
+        self.cursor = cursor
+        self.text = text
+        self.textvariable = textvariable
+        self.fg = fg
+        self.bg = bg
+        self.image = image
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.outline = outline
+        self.outline_color = _pick(outline_color, outline_colour)
+        self.shadow = shadow
+        self.shadow_offset = shadow_offset
+        self.shadow_color = _pick(shadow_color, shadow_colour)
+        self.justify = justify
+        self.max_width = max_width
+        self.overflow = overflow
+        self.min_font_size = min_font_size
+        self.wraplength = wraplength
+        self.fade_ms = fade_ms
+        self._picture = None         # the drawn text, kept until something changes
+        self._picture_key = None
+        self._old_picture = None     # the old text while fade_ms is fading it out
+        self._fade_start = 0
+        self._refresh()
+
+    def _get_text(self):
+        return str(self.textvariable.get() if self.textvariable else self.text)
+
+    def _is_plain(self, text):
+        """One line, no outline, no shadow, no limit: drawn exactly like v1.0."""
+        return ("\n" not in text and not self.outline and not self.shadow
+                and self._limit() is None and not self.fade_ms)
+
+    def _limit(self):
+        """(width, "shrink" / "cut" / "wrap") if the text has a width limit, else None."""
+        if self.max_width:
+            overflow = self.overflow or "shrink"
+            if overflow not in ("shrink", "cut", "wrap"):
+                raise ValueError(f"overflow='{overflow}' - use \"shrink\", \"cut\" or \"wrap\"")
+            return self.max_width, overflow
+        if self.wraplength:                      # tkinter's way of saying "wrap"
+            return self.wraplength, "wrap"
+        return None
+
+    def _fit_lines(self, lines, room):
+        """
+        Make the lines fit in `room` pixels (see max_width / overflow).
+        Returns (font, lines): the font may be smaller for "shrink".
+        """
+        font = self._font()
+        width, overflow = self._limit()
+
+        def widest(f):
+            return max(f.size(line)[0] for line in lines)
+
+        if overflow == "shrink" and widest(font) > room:
+            # Try smaller sizes (halving the range each time, so it's quick)
+            low, high = self.min_font_size, self.cget("font_size") - 1
+            best = None
+            while low <= high:
+                size = (low + high) // 2
+                smaller = get_font(self.cget("font_name"), size, self.cget("font_style"))
+                if widest(smaller) <= room:
+                    best, low = smaller, size + 1
+                else:
+                    high = size - 1
+            if best is None:
+                font = get_font(self.cget("font_name"), self.min_font_size,
+                                self.cget("font_style"))
+                words = self._get_text()
+                words = words if len(words) <= 30 else words[:30] + "..."
+                _warn_once(f"Label '{words}' is too long for max_width={width}, "
+                           f"even at min_font_size={self.min_font_size} - it ends in \"...\"")
+                lines = [_fit_text(font, line, room) for line in lines]
+            else:
+                font = best
+        elif overflow == "cut":
+            lines = [_fit_text(font, line, room) for line in lines]
+        elif overflow == "wrap":
+            wrapped = []
+            for paragraph in lines:            # the same rule as Message
+                line = ""
+                for word in paragraph.split(" "):
+                    attempt = word if not line else line + " " + word
+                    if font.size(attempt)[0] <= room or not line:
+                        line = attempt
+                    else:
+                        wrapped.append(line)
+                        line = word
+                wrapped.append(line)
+            # One word longer than the whole line is cut with "..."
+            lines = [_fit_text(font, line, room) for line in wrapped]
+        return font, lines
+
+    def _refresh(self):
+        if self.image is not None:
+            self.width, self.height = load_image(self.image).get_size()
+        elif self._is_plain(self._get_text()):
+            self.width, self.height = self._font().size(self._get_text())
+        else:
+            self.width, self.height = self._text_picture().get_size()
+
+    def _text_picture(self):
+        """
+        Draw the text (all its lines, outline and shadow) onto one picture.
+        It is kept and only drawn again when the text or an option changes,
+        so an outlined score Label costs nothing extra every frame.
+        """
+        font = self._font()
+        key = (self._get_text(), self.cget("fg"), self.cget("font_name"),
+               self.cget("font_size"), self.cget("font_style"), self.outline, self.cget("outline_color"),
+               self.shadow, tuple(self.shadow_offset), self.cget("shadow_color"),
+               self.justify, self._limit(), self.min_font_size)
+        if key == self._picture_key:
+            return self._picture
+        # fade_ms: keep the old text so draw() can fade it out
+        if self.fade_ms and self._picture is not None and key[0] != self._picture_key[0]:
+            self._old_picture = self._picture
+            self._fade_start = pg.time.get_ticks()
+
+        lines = self._get_text().split("\n")
+        edge = self.outline                       # room for the outline on each side
+        shadow_x, shadow_y = self.shadow_offset if self.shadow else (0, 0)
+        full_height = None
+        if self._limit() is not None:
+            # max_width counts the outline and shadow too
+            room = max(1, self._limit()[0] - 2 * edge - abs(shadow_x))
+            full_height = font.get_linesize() * (len(lines) - 1) + font.get_height()
+            font, lines = self._fit_lines(lines, room)
+        line_height = font.get_linesize()
+        widths = [font.size(line)[0] for line in lines]
+        text_height = line_height * (len(lines) - 1) + font.get_height()
+        # A shrunk label stays as tall as the full-size text (the text sits in the middle)
+        extra = 0
+        if full_height is not None and self._limit()[1] == "shrink" and full_height > text_height:
+            extra = full_height - text_height
+        width = max(widths) + 2 * edge + abs(shadow_x)
+        height = text_height + extra + 2 * edge + abs(shadow_y)
+        picture = pg.Surface((max(1, width), max(1, height)), pg.SRCALPHA)
+        # Where the text itself goes (the shadow can stick out up or left too)
+        left = edge + max(0, -shadow_x)
+        top = edge + max(0, -shadow_y) + extra // 2
+
+        for i, line in enumerate(lines):
+            if self.justify == "center":
+                x = left + (max(widths) - widths[i]) // 2
+            elif self.justify == "right":
+                x = left + max(widths) - widths[i]
+            else:
+                x = left
+            y = top + i * line_height
+            if self.shadow:
+                colour = self.cget("shadow_color")
+                words = font.render(line, True, colour[:3])
+                if len(colour) == 4:
+                    words.set_alpha(colour[3])
+                picture.blit(words, (x + shadow_x, y + shadow_y))
+            if self.outline:
+                # Draw the words in the outline colour all around, then on top
+                words = font.render(line, True, self.cget("outline_color"))
+                for dx in range(-edge, edge + 1):
+                    for dy in range(-edge, edge + 1):
+                        if (dx or dy) and dx * dx + dy * dy <= edge * edge + 1:
+                            picture.blit(words, (x + dx, y + dy))
+            picture.blit(font.render(line, True, self.cget("fg")), (x, y))
+
+        self._picture, self._picture_key = picture, key
+        return picture
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()                      # text may have been changed directly
+        r = self.get_rect(offset)
+        if self.cget("bg") is not None:
+            pg.draw.rect(screen, self.cget("bg"), r)
+        if self.image is not None:
+            screen.blit(load_image(self.image), r)
+        elif self._is_plain(self._get_text()):
+            screen.blit(self._font().render(self._get_text(), True, self.cget("fg")), r)
+        elif self._old_picture is not None:
+            self._draw_fade(screen, r)
+        else:
+            screen.blit(self._text_picture(), r)
+        if Debug.on and self._limit() is not None:
+            self._draw_limit_debug(screen, r)
+
+    def _draw_fade(self, screen, r):
+        """fade_ms: the old text fades out while the new text fades in."""
+        t = (pg.time.get_ticks() - self._fade_start) / max(1, self.fade_ms)
+        new = self._text_picture()
+        if t >= 1:                                # finished
+            self._old_picture = None
+            screen.blit(new, r)
+            return
+        old = self._old_picture
+        old_rect = old.get_rect()
+        if self.center:
+            old_rect.center = r.center
+        else:
+            old_rect.topleft = r.topleft
+        old.set_alpha(int(255 * (1 - t)))
+        screen.blit(old, old_rect)
+        new.set_alpha(int(255 * t))
+        screen.blit(new, r)
+        new.set_alpha(255)                        # the kept picture goes back to solid
+
+    def _draw_limit_debug(self, screen, r):
+        """F1 debug view: a box showing max_width, and the overflow mode."""
+        width, overflow = self._limit()
+        box = pg.Rect(0, 0, width, r.height)
+        if self.center:
+            box.center = r.center
+        else:
+            box.topleft = r.topleft
+        pg.draw.rect(screen, (0, 220, 255), box, 1)
+        tag = get_font(None, 16).render(f"max_width {width} ({overflow})", True, (0, 220, 255))
+        screen.blit(tag, (box.x + 2, box.bottom + 1))
+
+
+# ================================
+# Message Class
+# ================================
+
+class Message(Widget):
+    """
+    Text that wraps onto several lines (like tkinter's Message).
+    Good for instructions, story text and dialogue. "\\n" starts a new line.
+
+    Parameters:
+        x, y         - position
+        text         - the words to show
+        width        - how wide the text can be before it wraps (pixels)
+        textvariable - a StringVar to show instead of text
+        fg, bg       - text and background colours
+        font_name, font_size, font_style
+        justify      - "left", "center" or "right"
+        padding      - space around the text (when there is a bg)
+        center       - if True, (x, y) is the centre
+
+    Typing the text out one letter at a time (like dialogue in Pokemon):
+        type_speed   - letters per second, e.g. 30 (None = show it all at once)
+        type_sound   - a SoundEffect to play as each letter appears
+                       (a list of files gives random typewriter clicks;
+                       cooldown= stops it buzzing when typing fast)
+        on_done      - function (no arguments) run when the last letter appears
+        skip_keys    - keys that show the rest of the text (Space and Enter)
+
+    When typing, also call:
+        message.update(tick)          in update(tick) - types the next letters
+        message.handle_event(event)   in handle_inputs() - a click or Space
+                                      shows the rest of the text and returns
+                                      True, so the SAME press doesn't also
+                                      move on to the next line
+    message.typing is True while letters are still appearing.
+    message.skip() shows the rest now; message.restart() types it again.
+    Changing the text with config(text=...) starts typing again by itself.
+
+    Example:
+        story = Message(50, 50, "A long time ago...", width=400)
+        talk = Message(50, 400, "Hello there!", width=600, type_speed=30)
+    """
+
+    def __init__(self, x, y=0, text="", width=300, textvariable=None, fg=None, bg=None,
+                 font_name=None, font_size=None, justify="left", padding=8,
+                 line_spacing=4, center=False, visible=True, style=None,
+                 type_speed=None, type_sound=None, on_done=None,
+                 skip_keys=(pg.K_SPACE, pg.K_RETURN, pg.K_KP_ENTER), cursor=None,
+                 font_style=None):
+        super().__init__(x, y, width, 0, center, visible, style)
+        self.cursor = cursor
+        self.text = text
+        self.textvariable = textvariable
+        self.fg = fg
+        self.bg = bg
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.justify = justify
+        self.padding = padding
+        self.line_spacing = line_spacing
+        # Typing out (all off unless type_speed is given)
+        self.type_speed = type_speed
+        self.type_sound = type_sound
+        self.on_done = on_done
+        self.skip_keys = skip_keys
+        self._typed_text = None      # the text being typed (to notice when it changes)
+        self._shown = 0.0            # letters shown so far (a float: fractions add up)
+        self._done_called = False
+        self._refresh()
+
+    def _full_text(self):
+        return str(self.textvariable.get() if self.textvariable else self.text)
+
+    def _lines(self):
+        """Split the text into lines that fit inside the width."""
+        font = self._font()
+        text = self._full_text()
+        max_width = self.width - self.padding * 2
+        lines = []
+        for paragraph in text.split("\n"):
+            line = ""
+            for word in paragraph.split(" "):
+                attempt = word if not line else line + " " + word
+                if font.size(attempt)[0] <= max_width or not line:
+                    line = attempt
+                else:
+                    lines.append(line)
+                    line = word
+            lines.append(line)
+        return lines
+
+    def _refresh(self):
+        self._check_new_text()
+        font = self._font()
+        n = len(self._lines())
+        self.height = n * font.get_height() + (n - 1) * self.line_spacing + self.padding * 2
+
+    # ---------- Typing out ----------
+
+    def _check_new_text(self):
+        """If the text has changed (config or textvariable), type it from the start."""
+        text = self._full_text()
+        if text != self._typed_text:
+            self._typed_text = text
+            self.restart()
+
+    @property
+    def typing(self):
+        """True while letters are still appearing."""
+        self._check_new_text()
+        return bool(self.type_speed) and self._shown < len(self._typed_text)
+
+    def _letters_shown(self):
+        """How many letters of the text to draw."""
+        if not self.type_speed:
+            return len(self._typed_text)      # not typing: show everything
+        return int(self._shown)
+
+    def restart(self):
+        """Type the text out again from the first letter."""
+        self._shown = 0.0
+        self._done_called = False
+
+    def skip(self):
+        """Show the rest of the text straight away."""
+        was_typing = self.typing
+        self._shown = float(len(self._typed_text))
+        if was_typing:
+            self._finished()
+
+    def _finished(self):
+        """Run on_done once, when the last letter has appeared."""
+        if not self._done_called:
+            self._done_called = True
+            if self.on_done:
+                self.on_done()
+
+    def update(self, tick):
+        """Show more letters. tick = milliseconds since the last frame."""
+        if not self.typing:
+            return
+        before = int(self._shown)
+        self._shown = min(self._shown + self.type_speed * tick / 1000,
+                          len(self._typed_text))
+        new_letters = self._typed_text[before:int(self._shown)]
+        # One sound per frame at most (even if several letters appeared),
+        # and none for spaces, so it sounds like typing - not a buzz
+        if self.type_sound and new_letters.strip():
+            self.type_sound.play()
+        if not self.typing:
+            self._finished()
+
+    def handle_event(self, event, offset=(0, 0)):
+        """
+        While typing, a left click or a skip key shows the rest of the text
+        and returns True (the press is used up). Otherwise returns False,
+        so your game can use the press (e.g. to go to the next line).
+        """
+        if not self.visible or not self.typing:
+            return False
+        clicked = event.type == pg.MOUSEBUTTONDOWN and event.button == 1
+        key = event.type == pg.KEYDOWN and event.key in self.skip_keys
+        if clicked or key:
+            self.skip()
+            return True
+        return False
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()
+        r = self.get_rect(offset)
+        if self.cget("bg") is not None:
+            pg.draw.rect(screen, self.cget("bg"), r)
+        font = self._font()
+        y = r.y + self.padding
+        letters_left = self._letters_shown()
+        for line in self._lines():
+            # The lines are worked out from the WHOLE text, so a word never
+            # jumps to the next line half-way through being typed
+            part = line[:max(0, letters_left)]
+            letters_left -= len(line) + 1          # +1 for the space or \n after it
+            full_width = font.size(line)[0]        # place it as if it were all there
+            if self.justify == "center":
+                x = r.centerx - full_width // 2
+            elif self.justify == "right":
+                x = r.right - self.padding - full_width
+            else:
+                x = r.x + self.padding
+            if part:
+                screen.blit(font.render(part, True, self.cget("fg")), (x, y))
+            y += font.get_height() + self.line_spacing
+
+
+# ================================
+# Button Class
+# ================================
+
+class Button(Widget):
+    """
+    A clickable button (like tkinter's Button).
+
+    Parameters:
+        x, y, width, height - position and size
+        text          - the words on the button
+        command       - function to run when clicked (no brackets!)
+        fg            - text colour
+        bg            - button colour
+        hover_bg      - button colour when the mouse is over it
+        image         - picture for the button (filename or Surface), scaled to fit
+        hover_image   - picture when the mouse is over it
+        font_name, font_size, font_style
+        border_color  - border colour (border_colour also works)
+        border_width  - border thickness (0 = no border)
+        border_radius - roundness of the corners
+        shadow        - True to draw a shadow
+        shadow_offset - (x, y) distance of the shadow
+        shadow_color  - shadow colour, can include transparency (R, G, B, A)
+        center        - if True, (x, y) is the centre of the button
+        state         - "disabled" to grey it out
+        style         - a named Style, e.g. "Danger.Button"
+        active_bg     - button colour while it is held down (None = hover_bg)
+        active_image  - picture while it is held down
+        sound         - a SoundEffect (or a sound file name) played on each click
+        repeatdelay, repeatinterval - hold the button down and command runs
+                        again after repeatdelay ms, then every repeatinterval ms
+                        (like tkinter). 0 = off. Needs button.update(tick)
+                        (a Frame does that for you).
+
+    Example:
+        def start_game():
+            print("Starting!")
+        start = Button(100, 100, 150, 50, "Start", command=start_game)
+        plus = Button(100, 200, 50, 50, "+", command=add_one, sound="click.wav",
+                      active_bg=(60, 100, 200), repeatdelay=400, repeatinterval=80)
+    """
+
+    takes_focus = True
+
+    def __init__(self, x, y=0, width=None, height=None, text="", command=None,
+                 fg=None, bg=None, hover_bg=None, image=None, hover_image=None,
+                 font_name=None, font_size=None,
+                 border_color=None, border_colour=None, border_width=None,
+                 border_radius=None,
+                 shadow=False, shadow_offset=(3, 3),
+                 shadow_color=None, shadow_colour=None,
+                 center=False, visible=True, state="normal", style=None,
+                 active_bg=None, active_image=None, sound=None,
+                 repeatdelay=0, repeatinterval=0, cursor=None, font_style=None):
+        super().__init__(x, y, width or 0, height or 0, center, visible, style, state)
+        self.cursor = cursor
+        self._given_size = (width, height)     # None = fit the text
+        self.text = text
+        self.command = command
+        self.fg = fg
+        self.bg = bg
+        self.hover_bg = hover_bg
+        self.image = image
+        self.hover_image = hover_image
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.border_color = _pick(border_color, border_colour)
+        self.border_width = border_width
+        self.border_radius = border_radius
+        self.shadow = shadow
+        self.shadow_offset = shadow_offset
+        self.shadow_color = _pick(shadow_color, shadow_colour)
+        self.active_bg = active_bg
+        self.active_image = active_image
+        if isinstance(sound, str):
+            sound = SoundEffect(sound)          # a file name: load it once, here
+        self.sound = sound
+        self.repeatdelay = repeatdelay
+        self.repeatinterval = repeatinterval
+        self.pressed = False         # True while the mouse button is held down on it
+        self._held_ms = 0            # how long it has been held (for repeat)
+        self._next_repeat = 0
+        self._refresh()
+
+    def _refresh(self):
+        """A Button made without a width / height fits its text."""
+        given_w, given_h = self._given_size
+        if given_w is None or given_h is None:
+            text_w, text_h = self._font().size(str(self.text) or " ")
+            if self.image is not None and not self.text:
+                text_w, text_h = load_image(self.image).get_size()
+            self.width = given_w if given_w is not None else text_w + 30
+            self.height = given_h if given_h is not None else text_h + 16
+
+    def is_hovered(self, offset=(0, 0)):
+        """True if the mouse is over the button."""
+        return self.active and self.get_rect(offset).collidepoint(pg.mouse.get_pos())
+
+    def invoke(self):
+        """Run the command, as if the button was clicked."""
+        if self.state == "disabled":
+            return
+        if self.sound is not None:
+            self.sound.play()
+        if self.command:
+            self.command()
+
+    def focus_action(self, action):
+        if action == "activate":
+            self.invoke()
+            return True
+        return False
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()
+        r = self.get_rect(offset)
+        hovered = self.is_hovered(offset) or self.focused
+        held = self.pressed and self.is_hovered(offset)
+        radius = self.cget("border_radius") or 0
+
+        if self.image is not None:
+            picture = self.hover_image if hovered and self.hover_image is not None else self.image
+            if held and self.active_image is not None:
+                picture = self.active_image
+            screen.blit(load_image(picture, r.size), r)
+        else:
+            # Shadow
+            if self.shadow:
+                shadow_surface = pg.Surface(r.size, pg.SRCALPHA)
+                pg.draw.rect(shadow_surface, self.cget("shadow_color"),
+                             shadow_surface.get_rect(), border_radius=radius)
+                screen.blit(shadow_surface, r.move(self.shadow_offset))
+
+            # Button
+            colour = self.cget("hover_bg") if hovered else self.cget("bg")
+            if held and self.cget("active_bg") is not None:
+                colour = self.cget("active_bg")
+            pg.draw.rect(screen, colour, r, border_radius=radius)
+
+            # Border
+            border_width = self.cget("border_width") or 0
+            if self.cget("border_color") and border_width > 0:
+                pg.draw.rect(screen, self.cget("border_color"), r,
+                             width=border_width, border_radius=radius)
+
+        # Text
+        if self.text:
+            text_surface = self._font().render(str(self.text), True, self._text_colour())
+            screen.blit(text_surface, text_surface.get_rect(center=r.center))
+        self._draw_focus(screen, r)
+
+    def handle_event(self, event, offset=(0, 0)):
+        if event.type == pg.MOUSEBUTTONUP and getattr(event, "button", 1) == 1:
+            self.pressed = False         # let go: not returned as used, others need it too
+        if self.active and _clicked(event, self.get_rect(offset)):
+            self._last_offset = offset
+            self.pressed = True
+            self._held_ms = 0
+            self._next_repeat = self.repeatdelay
+            self.invoke()
+            return True
+        return False
+
+    def update(self, tick):
+        """Runs the command again while held (only with repeatdelay / repeatinterval)."""
+        if not self.active:
+            self.pressed = False
+        if not (self.pressed and self.repeatdelay and self.repeatinterval):
+            return
+        if not self.is_hovered(self._last_offset):
+            return                       # moved off the button: wait until back on it
+        self._held_ms += tick
+        while self._held_ms >= self._next_repeat:
+            self._next_repeat += self.repeatinterval
+            self.invoke()
+
+
+# ================================
+# Separator Class
+# ================================
+
+class Separator(Widget):
+    """
+    A dividing line (like ttk.Separator).
+
+    Parameters:
+        x, y    - start of the line
+        length  - how long the line is
+        orient  - "horizontal" or "vertical"
+        fg      - line colour
+        thickness - line thickness
+    """
+
+    def __init__(self, x, y=0, length=200, orient="horizontal", fg=None, thickness=2,
+                 center=False, visible=True, style=None, cursor=None):
+        super().__init__(x, y, center=center, visible=visible, style=style)
+        self.cursor = cursor
+        self.length = length
+        self.orient = orient
+        self.fg = fg
+        self.thickness = thickness
+        self._refresh()
+
+    def _refresh(self):
+        if self.orient == "vertical":
+            self.width, self.height = self.thickness, self.length
+        else:
+            self.width, self.height = self.length, self.thickness
+
+    def draw(self, screen, offset=(0, 0)):
+        if self.visible:
+            self._drawn(screen, offset)
+            pg.draw.rect(screen, self.cget("fg"), self.get_rect(offset))
+
+
+# ================================
+# TextBox Class
+# ================================
+
+class TextBox(Widget):
+    """
+    A box the player can type into (like tkinter's Entry).
+    Click it to start typing. Supports arrow keys, Home, End,
+    Backspace and Delete.
+
+    Parameters:
+        x, y           - position (top-left, or centre if center=True)
+        max_chars      - most letters allowed (also sets the box width)
+        text           - starting text
+        textvariable   - a StringVar that always holds the typed text
+        fg             - text colour
+        bg             - box colour
+        border_color   - border colour (border_colour also works)
+        font_name, font_size, font_style
+        padding        - space inside the box around the text
+        label          - optional words shown next to the box, e.g. "Name:"
+        label_fg       - label colour
+        label_gap      - space between label and box
+        label_position - "left", "right", "top" or "bottom"
+        on_enter       - function to run when Enter is pressed
+        center         - if True, (x, y) is the centre of box + label
+        state          - "disabled" to stop typing
+        show           - a character to draw instead of each letter, e.g. "*"
+                         for a password (get() still gives the real text).
+                         Kept in box.show_char, because box.show() is the
+                         method that makes the box visible.
+        placeholder    - grey hint text shown while the box is empty,
+                         e.g. "Type your name..." (colour: placeholder_fg)
+        allowed        - which keys can be typed: "digits", "letters", or a
+                         string of characters, e.g. "0123456789."
+                         (None = anything). Only stops typing - set_text()
+                         can still put anything in.
+        on_change      - function to run (no arguments) whenever the text
+                         changes, by typing or from your code
+
+    Example:
+        def submit():
+            print("Hello", name_box.get())
+        name_box = TextBox(100, 100, label="Name:", on_enter=submit)
+        pin_box = TextBox(100, 150, max_chars=4, show="*", allowed="digits",
+                          placeholder="PIN")
+    """
+
+    takes_focus = True
+
+    def __init__(self, x, y=0, max_chars=20, text="", textvariable=None,
+                 fg=None, bg=None, border_color=None, border_colour=None,
+                 font_name=None, font_size=None, padding=6,
+                 label=None, label_fg=None, label_gap=10, label_position="left",
+                 on_enter=None, center=False, visible=True, state="normal", style=None,
+                 show=None, placeholder=None, placeholder_fg=None, allowed=None,
+                 on_change=None, cursor=None, font_style=None):
+        super().__init__(x, y, center=center, visible=visible, style=style, state=state)
+        self.cursor = cursor
+        self.on_change = None        # set at the end, so the starting text doesn't run it
+        self.max_chars = max_chars
+        self.textvariable = textvariable
+        self.fg = fg
+        self.bg = bg
+        self.border_color = _pick(border_color, border_colour)
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.padding = padding
+        self.label = label
+        self.label_fg = label_fg
+        self.label_gap = label_gap
+        self.label_position = label_position.lower()
+        self.on_enter = on_enter
+        self.show_char = show        # not self.show - that is the show() method
+        self.placeholder = placeholder
+        self.placeholder_fg = placeholder_fg
+        self.allowed = allowed
+
+        self._text = ""
+        self.cursor_pos = 0
+        self.set_text(textvariable.get() if textvariable else text)
+        self.cursor_visible = True
+        self.cursor_timer = 0
+        self.typing = False         # True after clicking the box
+        self._refresh()
+        self.on_change = on_change
+
+    # The text is kept in the textvariable too, if there is one
+    @property
+    def text(self):
+        if self.textvariable is not None and self.textvariable.get() != self._text:
+            self._text = str(self.textvariable.get())[:self.max_chars]
+            self.cursor_pos = min(self.cursor_pos, len(self._text))
+        return self._text
+
+    @text.setter
+    def text(self, value):
+        old = self._text
+        self._text = str(value)[:self.max_chars]
+        self.cursor_pos = min(self.cursor_pos, len(self._text))
+        if self.textvariable is not None:
+            self.textvariable.set(self._text)
+        if self._text != old and self.on_change:
+            self.on_change()
+
+    def _can_type(self, character):
+        """Is this character allowed? (see the allowed option)"""
+        if self.allowed is None:
+            return True
+        if self.allowed == "digits":
+            return character.isdigit()
+        if self.allowed == "letters":
+            return character.isalpha()
+        return character in self.allowed
+
+    def _shown_text(self):
+        """The text as drawn: with show="*" every letter becomes a *."""
+        if self.show_char:
+            return self.show_char[0] * len(self.text)
+        return self.text
+
+    def config(self, **options):
+        """Like Widget.config(); config(show="*") changes the hiding character."""
+        if "show" in options:
+            options["show_char"] = options.pop("show")
+        super().config(**options)
+
+    configure = config
+
+    def _refresh(self):
+        """Work out where the box and label go (relative to the top-left)."""
+        font = self._font()
+        box_w = self.max_chars * font.size("M")[0] + self.padding * 2
+        box_h = font.get_height() + self.padding * 2
+
+        if not self.label:
+            self.box_rect = pg.Rect(0, 0, box_w, box_h)
+            self.label_rect = None
+            self.width, self.height = box_w, box_h
+            return
+
+        label_w, label_h = font.size(self.label)
+        gap = self.label_gap
+        if self.label_position in ("left", "right"):
+            self.width = label_w + gap + box_w
+            self.height = max(box_h, label_h)
+            box_y = (self.height - box_h) // 2
+            label_y = (self.height - label_h) // 2
+            if self.label_position == "left":
+                self.label_rect = pg.Rect(0, label_y, label_w, label_h)
+                self.box_rect = pg.Rect(label_w + gap, box_y, box_w, box_h)
+            else:
+                self.box_rect = pg.Rect(0, box_y, box_w, box_h)
+                self.label_rect = pg.Rect(box_w + gap, label_y, label_w, label_h)
+        else:   # "top" or "bottom"
+            self.width = max(box_w, label_w)
+            self.height = label_h + gap + box_h
+            box_x = (self.width - box_w) // 2
+            label_x = (self.width - label_w) // 2
+            if self.label_position == "top":
+                self.label_rect = pg.Rect(label_x, 0, label_w, label_h)
+                self.box_rect = pg.Rect(box_x, label_h + gap, box_w, box_h)
+            else:
+                self.box_rect = pg.Rect(box_x, 0, box_w, box_h)
+                self.label_rect = pg.Rect(label_x, box_h + gap, label_w, label_h)
+
+    # ---- text methods (get / set like tkinter) ----
+    def get(self):
+        """Return the text typed in the box."""
+        return self.text
+
+    get_text = get
+
+    def set_text(self, new_text):
+        """Replace the text in the box."""
+        self.text = new_text
+        self.cursor_pos = len(self.text)
+
+    def clear(self):
+        """Empty the box."""
+        self.set_text("")
+
+    def insert_text(self, characters):
+        """Type characters at the cursor (stops at max_chars)."""
+        for ch in characters:
+            text = self.text
+            if len(text) >= self.max_chars:
+                break
+            if not self._can_type(ch):
+                continue
+            pos = self.cursor_pos
+            self.text = text[:pos] + ch + text[pos:]
+            self.cursor_pos = pos + 1
+
+    # ---- keyboard ----
+    def _key(self, event):
+        text, pos = self.text, self.cursor_pos
+        if event.key in (pg.K_RETURN, pg.K_KP_ENTER):
+            if self.on_enter:
+                self.on_enter()
+        elif event.key == pg.K_BACKSPACE:
+            if pos > 0:
+                self.text = text[:pos - 1] + text[pos:]
+                self.cursor_pos = pos - 1
+        elif event.key == pg.K_DELETE:
+            self.text = text[:pos] + text[pos + 1:]
+        elif event.key == pg.K_LEFT:
+            self.cursor_pos = max(0, pos - 1)
+        elif event.key == pg.K_RIGHT:
+            self.cursor_pos = min(len(text), pos + 1)
+        elif event.key == pg.K_HOME:
+            self.cursor_pos = 0
+        elif event.key == pg.K_END:
+            self.cursor_pos = len(text)
+        elif event.key == pg.K_ESCAPE:
+            self.typing = False
+        elif event.unicode and event.unicode.isprintable():
+            self.insert_text(event.unicode)
+        else:
+            return False
+        return True
+
+    def focus_action(self, action):
+        if action == "activate":
+            self.typing = True       # Enter / Space starts typing
+            return True
+        return False
+
+    # ---- game loop methods ----
+    def handle_event(self, event, offset=(0, 0)):
+        if not self.active:
+            self.typing = False
+            return False
+        box_on_screen = self.box_rect.move(self.get_rect(offset).topleft)
+
+        if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+            self.typing = box_on_screen.collidepoint(event.pos)
+            return self.typing
+
+        if self.typing and event.type == pg.KEYDOWN:
+            return self._key(event)
+        return False
+
+    def update(self, tick):
+        """Make the cursor blink."""
+        self.cursor_timer += tick
+        if self.cursor_timer >= 400:
+            self.cursor_timer = 0
+            self.cursor_visible = not self.cursor_visible
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()
+        font = self._font()
+        top_left = self.get_rect(offset).topleft
+
+        # Label
+        if self.label_rect:
+            screen.blit(font.render(self.label, True, self.cget("label_fg")),
+                        self.label_rect.move(top_left))
+
+        # Box
+        box = self.box_rect.move(top_left)
+        pg.draw.rect(screen, self.cget("bg"), box)
+        pg.draw.rect(screen, self.cget("border_color"), box, 2)
+
+        # Text (or the grey placeholder while it is empty)
+        shown = self._shown_text()
+        if not shown and self.placeholder and not self.typing:
+            text_surface = font.render(self.placeholder, True, self.cget("placeholder_fg"))
+            # Cut off a long hint so it stays inside the box
+            room = box.width - 2 * self.padding
+            if text_surface.get_width() > room:
+                text_surface = text_surface.subsurface((0, 0, room, text_surface.get_height()))
+        else:
+            text_surface = font.render(shown, True, self._text_colour())
+        text_x = box.x + self.padding
+        text_y = box.y + (box.height - text_surface.get_height()) // 2
+        screen.blit(text_surface, (text_x, text_y))
+
+        # Cursor (measured on the shown text, so it lines up with the *s)
+        if self.typing and self.cursor_visible:
+            cursor_x = text_x + font.size(shown[:self.cursor_pos])[0]
+            pg.draw.line(screen, self.cget("fg"), (cursor_x, text_y),
+                         (cursor_x, text_y + font.get_height()), 2)
+        self._draw_focus(screen, box)
+
+
+# ================================
+# Checkbutton Class
+# ================================
+
+class Checkbutton(Widget):
+    """
+    A tick box with text (like tkinter's Checkbutton). Click to tick / untick.
+
+    Parameters:
+        x, y        - position
+        text        - words next to the box
+        variable    - a BooleanVar (or IntVar / StringVar) holding the value
+        onvalue     - value when ticked (default True)
+        offvalue    - value when not ticked (default False)
+        command     - function to run when clicked
+        fg, bg      - text colour, background behind the whole widget
+        box_bg      - colour inside the box
+        check_color - colour of the tick
+        image, selected_image - pictures for the box (unticked / ticked)
+        box_size    - size of the box (default: height of the text)
+        font_name, font_size, font_style, state, style
+
+    Example:
+        music_on = BooleanVar(True)
+        Checkbutton(50, 50, "Music", variable=music_on)
+        if music_on.get(): ...
+    """
+
+    takes_focus = True
+    _shape = "box"
+
+    def __init__(self, x, y=0, text="", variable=None, onvalue=True, offvalue=False,
+                 command=None, fg=None, bg=None, box_bg=None,
+                 check_color=None, check_colour=None, image=None, selected_image=None,
+                 box_size=None, font_name=None, font_size=None,
+                 center=False, visible=True, state="normal", style=None, cursor=None,
+                 font_style=None):
+        super().__init__(x, y, center=center, visible=visible, style=style, state=state)
+        self.cursor = cursor
+        self.text = text
+        self.variable = variable if variable is not None else BooleanVar(False)
+        self.onvalue = onvalue
+        self.offvalue = offvalue
+        self.command = command
+        self.fg = fg
+        self.bg = bg
+        self.box_bg = box_bg
+        self.check_color = _pick(check_color, check_colour)
+        self.image = image
+        self.selected_image = selected_image
+        self.box_size = box_size
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self._refresh()
+
+    def _box(self):
+        return self.box_size or self._font().get_height()
+
+    def _refresh(self):
+        box = self._box()
+        text_w, text_h = self._font().size(str(self.text)) if self.text else (0, 0)
+        gap = 8 if self.text else 0
+        self.width = box + gap + text_w
+        self.height = max(box, text_h)
+
+    def is_selected(self):
+        return self.variable.get() == self.onvalue
+
+    def get(self):
+        return self.variable.get()
+
+    def select(self):
+        self.variable.set(self.onvalue)
+
+    def deselect(self):
+        self.variable.set(self.offvalue)
+
+    def toggle(self):
+        if self.is_selected():
+            self.deselect()
+        else:
+            self.select()
+
+    def invoke(self):
+        """Click it from code."""
+        if self.state == "disabled":
+            return
+        self.toggle()
+        if self.command:
+            self.command()
+
+    def focus_action(self, action):
+        if action == "activate":
+            self.invoke()
+            return True
+        return False
+
+    def handle_event(self, event, offset=(0, 0)):
+        if self.active and _clicked(event, self.get_rect(offset)):
+            self.invoke()
+            return True
+        return False
+
+    def _draw_mark(self, screen, box_rect):
+        """Draw the empty box and the tick."""
+        selected = self.is_selected()
+        if self.image is not None:
+            picture = self.selected_image if selected and self.selected_image is not None else self.image
+            screen.blit(load_image(picture, box_rect.size), box_rect)
+            return
+        pg.draw.rect(screen, self.cget("box_bg"), box_rect, border_radius=3)
+        pg.draw.rect(screen, self.cget("border_color"), box_rect, 2, border_radius=3)
+        if selected:
+            s = box_rect.width
+            points = [(box_rect.x + s * 0.2, box_rect.y + s * 0.55),
+                      (box_rect.x + s * 0.42, box_rect.y + s * 0.75),
+                      (box_rect.x + s * 0.8, box_rect.y + s * 0.25)]
+            pg.draw.lines(screen, self.cget("check_color"), False, points, max(2, s // 7))
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()
+        r = self.get_rect(offset)
+        if self.cget("bg") is not None:
+            pg.draw.rect(screen, self.cget("bg"), r)
+        box = self._box()
+        box_rect = pg.Rect(r.x, r.y + (r.height - box) // 2, box, box)
+        self._draw_mark(screen, box_rect)
+        if self.text:
+            surface = self._font().render(str(self.text), True, self._text_colour())
+            screen.blit(surface, (box_rect.right + 8, r.centery - surface.get_height() // 2))
+        self._draw_focus(screen, r)
+
+
+# ================================
+# Radiobutton Class
+# ================================
+
+class Radiobutton(Checkbutton):
+    """
+    One choice from a group (like tkinter's Radiobutton).
+    Give every Radiobutton in a group the SAME variable and a different value.
+
+    Parameters:
+        x, y      - position
+        text      - words next to the circle
+        variable  - the shared StringVar / IntVar
+        value     - the value this button sets
+        command   - function to run when chosen
+        (other options are the same as Checkbutton)
+
+    Example:
+        difficulty = StringVar("Normal")
+        Radiobutton(50, 50, "Easy", variable=difficulty, value="Easy")
+        Radiobutton(50, 80, "Normal", variable=difficulty, value="Normal")
+        Radiobutton(50, 110, "Hard", variable=difficulty, value="Hard")
+    """
+
+    def __init__(self, x, y=0, text="", variable=None, value=None, command=None, **options):
+        if variable is None:
+            variable = StringVar("")
+        super().__init__(x, y, text, variable=variable, onvalue=value, command=command,
+                         **options)
+        self.value = value
+
+    def is_selected(self):
+        return self.variable.get() == self.value
+
+    def invoke(self):
+        if self.state == "disabled":
+            return
+        self.variable.set(self.value)
+        if self.command:
+            self.command()
+
+    def _draw_mark(self, screen, box_rect):
+        selected = self.is_selected()
+        if self.image is not None:
+            picture = self.selected_image if selected and self.selected_image is not None else self.image
+            screen.blit(load_image(picture, box_rect.size), box_rect)
+            return
+        radius = box_rect.width // 2
+        pg.draw.circle(screen, self.cget("box_bg"), box_rect.center, radius)
+        pg.draw.circle(screen, self.cget("border_color"), box_rect.center, radius, 2)
+        if selected:
+            pg.draw.circle(screen, self.cget("check_color"), box_rect.center,
+                           max(2, radius - 5))
+
+
+# ================================
+# Scale Class
+# ================================
+
+class Scale(Widget):
+    """
+    A slider for choosing a number (like tkinter's Scale).
+    Drag the handle, or click anywhere on the bar.
+
+    Parameters:
+        x, y        - position
+        from_, to   - lowest and highest values
+        length      - length of the slider in pixels
+        orient      - "horizontal" or "vertical"
+        variable    - an IntVar / DoubleVar holding the value
+        resolution  - step size (1 = whole numbers, 0.1 = one decimal place)
+        command     - function to run when the value changes
+        label       - optional words shown above the slider
+        showvalue   - True to show the number
+        fg          - text colour
+        accent      - handle colour
+        trough_color - colour of the bar
+        thickness   - thickness of the bar
+        handle_image - optional picture for the handle
+
+    Example:
+        volume = IntVar(50)
+        Scale(50, 100, from_=0, to=100, variable=volume, label="Volume")
+    """
+
+    takes_focus = True
+
+    def __init__(self, x, y=0, from_=0, to=100, length=200, orient="horizontal",
+                 variable=None, resolution=1, command=None, label=None, showvalue=True,
+                 fg=None, accent=None, trough_color=None, trough_colour=None,
+                 thickness=8, handle_image=None, font_name=None, font_size=None,
+                 center=False, visible=True, state="normal", style=None, cursor=None,
+                 font_style=None):
+        super().__init__(x, y, center=center, visible=visible, style=style, state=state)
+        self.cursor = cursor
+        self.from_ = from_
+        self.to = to
+        self.length = length
+        self.orient = orient
+        self.resolution = resolution
+        if variable is None:
+            whole = float(resolution or 1).is_integer()
+            variable = IntVar(from_) if whole else DoubleVar(from_)
+        self.variable = variable
+        self.command = command
+        self.label = label
+        self.showvalue = showvalue
+        self.fg = fg
+        self.accent = accent
+        self.trough_color = _pick(trough_color, trough_colour)
+        self.thickness = thickness
+        self.handle_image = handle_image
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.dragging = False
+        self._refresh()
+
+    def _handle_radius(self):
+        return self.thickness + 4
+
+    def _text_height(self):
+        return self._font().get_height() if (self.label or self.showvalue) else 0
+
+    def _refresh(self):
+        h = self._handle_radius() * 2
+        if self.orient == "vertical":
+            self.width = h + 60
+            self.height = self.length + self._text_height() + 4
+        else:
+            self.width = self.length
+            self.height = self._text_height() + h
+
+    def _bar(self, r):
+        """The bar's rectangle on screen."""
+        top = r.y + self._text_height()
+        radius = self._handle_radius()
+        if self.orient == "vertical":
+            return pg.Rect(r.x + radius - self.thickness // 2, top + 4,
+                           self.thickness, self.length)
+        return pg.Rect(r.x, top + radius - self.thickness // 2, self.length, self.thickness)
+
+    def get(self):
+        return self.variable.get()
+
+    def set(self, value):
+        """Set the value (kept between from_ and to, rounded to resolution)."""
+        low, high = min(self.from_, self.to), max(self.from_, self.to)
+        value = max(low, min(high, value))
+        if self.resolution:
+            value = round(round(value / self.resolution) * self.resolution, 10)
+            if float(self.resolution).is_integer():
+                value = int(value)
+        old = self.variable.get()
+        self.variable.set(value)
+        if self.command and self.variable.get() != old:
+            self.command()
+
+    def _fraction(self):
+        span = self.to - self.from_
+        return 0 if span == 0 else (self.get() - self.from_) / span
+
+    def _set_from_mouse(self, pos, offset):
+        bar = self._bar(self.get_rect(offset))
+        if self.orient == "vertical":
+            fraction = (pos[1] - bar.y) / bar.height
+        else:
+            fraction = (pos[0] - bar.x) / bar.width
+        fraction = max(0, min(1, fraction))
+        self.set(self.from_ + fraction * (self.to - self.from_))
+
+    def focus_action(self, action):
+        step = self.resolution or (self.to - self.from_) / 20
+        direction = 1 if self.to >= self.from_ else -1
+        if action in ("right", "up") and self.orient == "horizontal" or \
+                action == "down" and self.orient == "vertical":
+            self.set(self.get() + step * direction)
+            return True
+        if action in ("left", "down") and self.orient == "horizontal" or \
+                action == "up" and self.orient == "vertical":
+            self.set(self.get() - step * direction)
+            return True
+        return False
+
+    def handle_event(self, event, offset=(0, 0)):
+        if not self.active:
+            self.dragging = False
+            return False
+        if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+            hit_area = self._bar(self.get_rect(offset)).inflate(
+                self._handle_radius() * 2, self._handle_radius() * 2)
+            if hit_area.collidepoint(event.pos):
+                self.dragging = True
+                self._set_from_mouse(event.pos, offset)
+                return True
+        elif event.type == pg.MOUSEMOTION and self.dragging:
+            self._set_from_mouse(event.pos, offset)
+            return True
+        elif event.type == pg.MOUSEBUTTONUP and event.button == 1 and self.dragging:
+            self.dragging = False
+            return True
+        return False
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()
+        r = self.get_rect(offset)
+        font = self._font()
+        bar = self._bar(r)
+
+        # Label and value
+        words = []
+        if self.label:
+            words.append(str(self.label))
+        if self.showvalue:
+            words.append(str(self.get()))
+        if words:
+            screen.blit(font.render("  ".join(words), True, self._text_colour()), r.topleft)
+
+        # Bar, filled part and handle
+        pg.draw.rect(screen, self.cget("trough_color"), bar, border_radius=self.thickness // 2)
+        fraction = self._fraction()
+        if self.orient == "vertical":
+            filled = pg.Rect(bar.x, bar.y, bar.width, int(bar.height * fraction))
+            handle = (bar.centerx, bar.y + int(bar.height * fraction))
+        else:
+            filled = pg.Rect(bar.x, bar.y, int(bar.width * fraction), bar.height)
+            handle = (bar.x + int(bar.width * fraction), bar.centery)
+        pg.draw.rect(screen, self.cget("accent"), filled, border_radius=self.thickness // 2)
+        radius = self._handle_radius()
+        if self.handle_image is not None:
+            picture = load_image(self.handle_image, (radius * 2, radius * 2))
+            screen.blit(picture, picture.get_rect(center=handle))
+        else:
+            pg.draw.circle(screen, self.cget("accent"), handle, radius)
+            pg.draw.circle(screen, WHITE, handle, radius, 2)
+        self._draw_focus(screen, bar.inflate(radius * 2, radius))
+
+
+# ================================
+# Spinbox Class
+# ================================
+
+class Spinbox(Widget):
+    """
+    A number (or choice) with up / down arrows (like tkinter's Spinbox).
+    Click the arrows or scroll the mouse wheel over it.
+
+    Parameters:
+        x, y        - position
+        from_, to   - lowest and highest numbers
+        increment   - how much each click changes it
+        values      - a list of choices to use instead of numbers,
+                      e.g. ["Red", "Green", "Blue"]
+        variable    - an IntVar / StringVar holding the value
+        wrap        - True to go back to the start after the end
+        width_chars - width of the box in letters
+        command     - function to run when the value changes
+        fg, bg, button_bg, border_color, font_name, font_size, font_style, state, style
+
+    Example:
+        players = IntVar(2)
+        Spinbox(50, 50, from_=1, to=4, variable=players)
+    """
+
+    takes_focus = True
+
+    def __init__(self, x, y=0, from_=0, to=10, increment=1, values=None, variable=None,
+                 wrap=False, width_chars=4, command=None,
+                 fg=None, bg=None, button_bg=None, border_color=None, border_colour=None,
+                 font_name=None, font_size=None,
+                 center=False, visible=True, state="normal", style=None, cursor=None,
+                 font_style=None):
+        super().__init__(x, y, center=center, visible=visible, style=style, state=state)
+        self.cursor = cursor
+        self.from_ = from_
+        self.to = to
+        self.increment = increment
+        self.values = list(values) if values else None
+        if variable is None:
+            variable = StringVar(self.values[0]) if self.values else IntVar(from_)
+        self.variable = variable
+        self.wrap = wrap
+        self.width_chars = width_chars
+        self.command = command
+        self.fg = fg
+        self.bg = bg
+        self.button_bg = button_bg
+        self.border_color = _pick(border_color, border_colour)
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self._refresh()
+
+    def _refresh(self):
+        font = self._font()
+        chars = self.width_chars
+        if self.values:
+            chars = max(chars, max(len(str(v)) for v in self.values))
+        self.height = font.get_height() + 12
+        self.button_w = self.height // 2 + 8
+        self.width = chars * font.size("M")[0] + 12 + self.button_w
+
+    def get(self):
+        return self.variable.get()
+
+    def set(self, value):
+        old = self.variable.get()
+        self.variable.set(value)
+        if self.command and self.variable.get() != old:
+            self.command()
+
+    def step(self, direction):
+        """Go up (direction=1) or down (direction=-1) one step."""
+        if self.state == "disabled":
+            return
+        if self.values:
+            current = str(self.get())
+            index = self.values.index(current) if current in self.values else 0
+            index += direction
+            if self.wrap:
+                index %= len(self.values)
+            index = max(0, min(len(self.values) - 1, index))
+            self.set(self.values[index])
+        else:
+            value = self.get() + direction * self.increment
+            if self.wrap and value > self.to:
+                value = self.from_
+            elif self.wrap and value < self.from_:
+                value = self.to
+            self.set(max(self.from_, min(self.to, value)))
+
+    def _buttons(self, r):
+        half = r.height // 2
+        up = pg.Rect(r.right - self.button_w, r.y, self.button_w, half)
+        down = pg.Rect(r.right - self.button_w, r.y + half, self.button_w, r.height - half)
+        return up, down
+
+    def focus_action(self, action):
+        if action in ("up", "right"):
+            self.step(1)
+            return True
+        if action in ("down", "left"):
+            self.step(-1)
+            return True
+        return False
+
+    def handle_event(self, event, offset=(0, 0)):
+        if not self.active:
+            return False
+        r = self.get_rect(offset)
+        up, down = self._buttons(r)
+        if _clicked(event, up):
+            self.step(1)
+            return True
+        if _clicked(event, down):
+            self.step(-1)
+            return True
+        if event.type == pg.MOUSEWHEEL and r.collidepoint(pg.mouse.get_pos()):
+            self.step(1 if event.y > 0 else -1)
+            return True
+        return False
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()
+        r = self.get_rect(offset)
+        pg.draw.rect(screen, self.cget("bg"), r)
+        pg.draw.rect(screen, self.cget("border_color"), r, 2)
+        surface = self._font().render(str(self.get()), True, self._text_colour())
+        screen.blit(surface, (r.x + 6, r.centery - surface.get_height() // 2))
+        for button, pointing_up in zip(self._buttons(r), (True, False)):
+            pg.draw.rect(screen, self.cget("button_bg"), button)
+            pg.draw.rect(screen, self.cget("border_color"), button, 1)
+            cx, cy, s = button.centerx, button.centery, button.height // 4
+            if pointing_up:
+                points = [(cx - s, cy + s // 2), (cx + s, cy + s // 2), (cx, cy - s // 2 - 1)]
+            else:
+                points = [(cx - s, cy - s // 2), (cx + s, cy - s // 2), (cx, cy + s // 2 + 1)]
+            pg.draw.polygon(screen, self._text_colour(), points)
+        self._draw_focus(screen, r)
+
+
+# ================================
+# Listbox Class
+# ================================
+
+class Listbox(Widget):
+    """
+    A list of items you can click to choose (like tkinter's Listbox).
+    Scroll with the mouse wheel when there are more items than rows.
+
+    Parameters:
+        x, y      - position
+        width     - width in pixels
+        rows      - how many items show at once (tkinter calls this height)
+        items     - starting list of items
+        command   - function to run when an item is chosen
+        fg, bg, select_fg, select_bg, border_color, font_name, font_size, font_style, style
+        selectmode - "single" (default): one item at a time.
+                     "multiple": each click ticks or unticks an item, so
+                     several can be chosen (like tkinter's MULTIPLE)
+
+    Methods (like tkinter):
+        insert("end", "Level 4")   delete(0)    get(2)    size()
+        curselection()  -> (index,) of the chosen item, or ()
+                           (selectmode="multiple": every chosen index)
+        selection_set(1)    selection_clear()    selection_includes(1)
+        get_all_selected() -> a list of every chosen item
+
+    Example:
+        levels = Listbox(50, 50, 200, rows=5, items=["Level 1", "Level 2"])
+        chosen = levels.get_selected()      # "Level 1" or None
+        toppings = Listbox(300, 50, 200, items=["Cheese", "Ham"], selectmode="multiple")
+        toppings.get_all_selected()         # ["Cheese", "Ham"]
+    """
+
+    takes_focus = True
+
+    def __init__(self, x, y=0, width=200, rows=5, items=None, command=None,
+                 fg=None, bg=None, select_fg=None, select_bg=None,
+                 border_color=None, border_colour=None, font_name=None, font_size=None,
+                 center=False, visible=True, state="normal", style=None,
+                 selectmode="single", cursor=None, font_style=None):
+        super().__init__(x, y, width, 0, center, visible, style, state)
+        self.cursor = cursor
+        if selectmode == "browse":
+            selectmode = "single"       # tkinter's name for the normal mode
+        if selectmode not in ("single", "multiple"):
+            raise ValueError(f"selectmode must be 'single' or 'multiple', not "
+                             f"'{selectmode}' (for Shift / Ctrl-click choosing, "
+                             f"use 'multiple': each click ticks or unticks an item)")
+        self.selectmode = selectmode
+        self.chosen = set()             # selectmode="multiple": every chosen index
+        self.rows = rows
+        self.items = list(items) if items else []
+        self.command = command
+        self.fg = fg
+        self.bg = bg
+        self.select_fg = select_fg
+        self.select_bg = select_bg
+        self.border_color = _pick(border_color, border_colour)
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.selected = None        # index of the chosen item
+        self.scroll = 0             # index of the top item showing
+        self._refresh()
+
+    def _row_height(self):
+        return self._font().get_height() + 6
+
+    def _refresh(self):
+        self.height = self.rows * self._row_height() + 4
+
+    # ---- tkinter-style methods ----
+    def insert(self, index, *items):
+        """Add items. index can be a number or "end"."""
+        if index == "end":
+            index = len(self.items)
+        for i, item in enumerate(items):
+            self.items.insert(index + i, item)
+
+    def delete(self, first, last=None):
+        """Remove item first (or items first..last). "end" means the last item."""
+        if first == "end":
+            first = len(self.items) - 1
+        if last is None:
+            last = first
+        elif last == "end":
+            last = len(self.items) - 1
+        del self.items[first:last + 1]
+        if self.selected is not None and self.selected >= len(self.items):
+            self.selected = None
+        # Chosen items after the deleted ones move up to their new places
+        removed = last - first + 1
+        self.chosen = {i if i < first else i - removed
+                       for i in self.chosen if not first <= i <= last}
+        self.scroll = max(0, min(self.scroll, len(self.items) - self.rows))
+
+    def get(self, index):
+        return self.items[index]
+
+    def size(self):
+        return len(self.items)
+
+    def curselection(self):
+        if self.selectmode == "multiple":
+            return tuple(sorted(self.chosen))
+        return () if self.selected is None else (self.selected,)
+
+    def get_selected(self):
+        """The chosen item (the last one clicked), or None."""
+        return None if self.selected is None else self.items[self.selected]
+
+    def get_all_selected(self):
+        """A list of every chosen item (useful with selectmode="multiple")."""
+        return [self.items[i] for i in self.curselection()]
+
+    def selection_set(self, index):
+        self.selected = index
+        if self.selectmode == "multiple":
+            self.chosen.add(index)
+        self.see(index)
+
+    def selection_clear(self):
+        self.selected = None
+        self.chosen.clear()
+
+    def selection_includes(self, index):
+        """True if item index is chosen."""
+        return index in self.curselection()
+
+    def see(self, index):
+        """Scroll so item index can be seen."""
+        if index < self.scroll:
+            self.scroll = index
+        elif index >= self.scroll + self.rows:
+            self.scroll = index - self.rows + 1
+
+    def _list_scrollbar(self, r):
+        """(track, thumb) rects, or None when every item fits."""
+        if len(self.items) <= self.rows:
+            return None
+        track = pg.Rect(r.right - 13, r.y + 2, 11, r.height - 4)
+        return _scrollbar_rects(track, self.rows, len(self.items), self.scroll)
+
+    def _choose(self, index):
+        if 0 <= index < len(self.items):
+            if self.selectmode == "multiple" and index in self.chosen:
+                self.chosen.discard(index)        # clicked again: untick it
+                self.selected = index
+            else:
+                self.selection_set(index)
+            if self.command:
+                self.command()
+
+    def focus_action(self, action):
+        if not self.items:
+            return False
+        current = -1 if self.selected is None else self.selected
+        if self.selectmode == "multiple":
+            # Arrows move the outline, Enter / Space ticks or unticks
+            if action in ("down", "up"):
+                step = 1 if action == "down" else -1
+                self.selected = max(0, min(len(self.items) - 1, current + step))
+                self.see(self.selected)
+                return True
+            if action == "activate" and self.selected is not None:
+                self._choose(self.selected)
+                return True
+            return False
+        if action == "down":
+            self._choose(min(len(self.items) - 1, current + 1))
+            return True
+        if action == "up":
+            self._choose(max(0, current - 1))
+            return True
+        if action == "activate" and self.selected is not None and self.command:
+            self.command()
+            return True
+        return False
+
+    def handle_event(self, event, offset=(0, 0)):
+        if not self.active:
+            return False
+        r = self.get_rect(offset)
+        bar = self._list_scrollbar(r)
+        if bar and _scrollbar_event(self, event, *bar, self.rows, len(self.items)):
+            return True
+        if _clicked(event, r):
+            index = self.scroll + (event.pos[1] - r.y - 2) // self._row_height()
+            self._choose(index)
+            return True
+        if event.type == pg.MOUSEWHEEL and r.collidepoint(pg.mouse.get_pos()):
+            most = max(0, len(self.items) - self.rows)
+            self.scroll = max(0, min(most, self.scroll - event.y))
+            return True
+        return False
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()
+        r = self.get_rect(offset)
+        font = self._font()
+        row_h = self._row_height()
+        pg.draw.rect(screen, self.cget("bg"), r)
+
+        for row in range(self.rows):
+            index = self.scroll + row
+            if index >= len(self.items):
+                break
+            row_rect = pg.Rect(r.x + 2, r.y + 2 + row * row_h, r.width - 4, row_h)
+            colour = self._text_colour()
+            if self.selectmode == "multiple":
+                chosen = index in self.chosen
+                if index == self.selected and self.focused:
+                    pg.draw.rect(screen, self.cget("select_bg"), row_rect, 2)
+            else:
+                chosen = index == self.selected
+            if chosen:
+                pg.draw.rect(screen, self.cget("select_bg"), row_rect)
+                colour = self.cget("select_fg")
+            surface = font.render(str(self.items[index]), True, colour)
+            screen.blit(surface, (row_rect.x + 4, row_rect.y + 3))
+
+        # Scroll bar (only if there are more items than rows) - drag or click it
+        bar = self._list_scrollbar(r)
+        if bar:
+            track, thumb = bar
+            pg.draw.rect(screen, self.cget("trough_color"), track)
+            pg.draw.rect(screen, self.cget("accent"), thumb, border_radius=4)
+
+        pg.draw.rect(screen, self.cget("border_color"), r, 2)
+        self._draw_focus(screen, r)
+
+
+# ================================
+# Combobox Class
+# ================================
+
+class Combobox(Widget):
+    """
+    A drop-down list (like ttk.Combobox). Click to open, click a choice.
+
+    Draw it AFTER the widgets below it, so the open list is on top
+    (inside a Frame or Notebook this is done for you).
+
+    Parameters:
+        x, y         - position
+        width        - width in pixels
+        values       - the choices, e.g. ["Knight", "Wizard", "Archer"]
+        textvariable - a StringVar holding the chosen value
+        command      - function to run when a choice is made
+        max_rows     - most choices shown at once when open
+        fg, bg, select_fg, select_bg, border_color, font_name, font_size, font_style, style
+        editable     - True: the player can also type. The list only shows
+                       the choices that contain what was typed; Enter picks
+                       the highlighted one, or keeps the typed words if
+                       nothing matches. False (default) = choose only.
+        list_width   - how wide the open list is:
+                       "fit" (default) - wide enough for the longest choice
+                                         (never narrower than the box, and it
+                                         stays inside the window)
+                       "box"           - the same width as the box (like tkinter)
+                       a number        - that many pixels
+                       Choices that still don't fit end in "...".
+
+    A chosen value that is too long for the box ends in "..." too.
+
+    Example:
+        hero = StringVar("Knight")
+        Combobox(50, 50, 200, values=["Knight", "Wizard", "Archer"], textvariable=hero)
+        Combobox(50, 100, 200, values=countries, editable=True)   # type to search
+    """
+
+    takes_focus = True
+
+    def __init__(self, x, y=0, width=200, values=None, textvariable=None, command=None,
+                 max_rows=6, fg=None, bg=None, select_fg=None, select_bg=None,
+                 border_color=None, border_colour=None, font_name=None, font_size=None,
+                 center=False, visible=True, state="normal", style=None, editable=False,
+                 cursor=None, list_width="fit", font_style=None):
+        super().__init__(x, y, width, 0, center, visible, style, state)
+        self.cursor = cursor
+        self.editable = editable
+        self.list_width = list_width
+        self._longest = (None, 0)    # (what was measured, width of the longest choice)
+        self.typed = None            # editable: the words typed so far (None = not typing)
+        self.values = list(values) if values else []
+        if textvariable is None:
+            textvariable = StringVar(self.values[0] if self.values else "")
+        self.textvariable = textvariable
+        self.command = command
+        self.max_rows = max_rows
+        self.fg = fg
+        self.bg = bg
+        self.select_fg = select_fg
+        self.select_bg = select_bg
+        self.border_color = _pick(border_color, border_colour)
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.is_open = False
+        self.scroll = 0
+        self.highlight = 0           # choice under the mouse / arrow keys
+        self._refresh()
+
+    def _row_height(self):
+        return self._font().get_height() + 8
+
+    def _refresh(self):
+        self.height = self._row_height() + 4
+
+    def get(self):
+        return self.textvariable.get()
+
+    def set(self, value):
+        self.textvariable.set(value)
+
+    def current(self, index=None):
+        """current() returns the chosen index; current(2) chooses item 2."""
+        if index is None:
+            value = self.get()
+            return self.values.index(value) if value in self.values else -1
+        self.set(self.values[index])
+
+    def _shown_values(self):
+        """The choices in the open list (editable: only the ones that match)."""
+        if not self.typed:
+            return self.values
+        words = self.typed.lower()
+        return [value for value in self.values if words in str(value).lower()]
+
+    def _choose(self, index):
+        """Choose item index of the list that is showing."""
+        old = self.get()
+        self.set(self._shown_values()[index])
+        self.is_open = False
+        self.typed = None
+        if self.command and self.get() != old:
+            self.command()
+
+    def _open(self):
+        self.is_open = True
+        self.typed = "" if self.editable else None
+        self.highlight = max(0, self.current())
+        if self.editable:                     # start with the chosen one in view
+            self.scroll = max(0, self.highlight - self.max_rows + 1)
+
+    def _close(self):
+        self.is_open = False
+        self.typed = None
+
+    def _move_highlight(self, direction):
+        shown = self._shown_values()
+        self.highlight = max(0, min(len(shown) - 1, self.highlight + direction))
+        if self.highlight < self.scroll:
+            self.scroll = self.highlight
+        elif self.highlight >= self.scroll + self.max_rows:
+            self.scroll = self.highlight - self.max_rows + 1
+
+    def _type_key(self, event):
+        """editable=True: typing into the open box. Returns True if used."""
+        if event.key in (pg.K_RETURN, pg.K_KP_ENTER):
+            if self._shown_values():
+                self._choose(self.highlight)
+            else:                                # nothing matches: keep the typed words
+                old = self.get()
+                if self.typed:
+                    self.set(self.typed)
+                self._close()
+                if self.command and self.get() != old:
+                    self.command()
+        elif event.key == pg.K_ESCAPE:
+            self._close()
+        elif event.key in (pg.K_DOWN, pg.K_UP):
+            self._move_highlight(1 if event.key == pg.K_DOWN else -1)
+        elif event.key == pg.K_BACKSPACE:
+            self.typed = self.typed[:-1]
+            self.highlight, self.scroll = 0, 0
+        elif event.unicode and event.unicode.isprintable():
+            self.typed += event.unicode
+            self.highlight, self.scroll = 0, 0
+        else:
+            return False
+        return True
+
+    def _longest_choice(self):
+        """Width in pixels of the longest choice (measured again only if they change)."""
+        font = self._font()
+        key = (id(font), tuple(str(value) for value in self.values))
+        if self._longest[0] != key:
+            widest = max([font.size(text)[0] for text in key[1]] + [0])
+            self._longest = (key, widest)
+        return self._longest[1]
+
+    def _list_rect(self, r):
+        rows = max(1, min(self.max_rows, len(self._shown_values())))
+        width = r.width
+        if self.list_width == "fit":
+            # room for the text, its padding and the border
+            width = max(r.width, self._longest_choice() + 16)
+        elif self.list_width != "box":
+            width = int(self.list_width)
+        lst = pg.Rect(r.x, r.bottom, width, rows * self._row_height() + 4)
+        # Keep the list inside the window (move it left, or make it narrower)
+        screen = pg.display.get_surface()
+        if screen is not None:
+            screen_width = screen.get_width()
+            lst.width = min(lst.width, screen_width)
+            if lst.right > screen_width:
+                lst.x = screen_width - lst.width
+        return lst
+
+    def focus_action(self, action):
+        if not self.values:
+            return False
+        if action == "activate":
+            if self.is_open:
+                if self._shown_values():
+                    self._choose(self.highlight)
+                else:
+                    self._close()
+            else:
+                self._open()
+            return True
+        if action in ("down", "up"):
+            direction = 1 if action == "down" else -1
+            if self.is_open:
+                self._move_highlight(direction)
+            else:
+                index = max(0, min(len(self.values) - 1, self.current() + direction))
+                self._choose(index)
+            return True
+        return False
+
+    def handle_event(self, event, offset=(0, 0)):
+        if not self.active:
+            self._close()
+            return False
+        r = self.get_rect(offset)
+        if self.is_open:
+            lst = self._list_rect(r)
+            shown = self._shown_values()
+            if self.editable and event.type == pg.KEYDOWN:
+                return self._type_key(event)
+            if event.type == pg.MOUSEMOTION and lst.collidepoint(event.pos):
+                self.highlight = self.scroll + (event.pos[1] - lst.y - 2) // self._row_height()
+                return True
+            if event.type == pg.MOUSEWHEEL:
+                most = max(0, len(shown) - self.max_rows)
+                self.scroll = max(0, min(most, self.scroll - event.y))
+                return True
+            if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                if lst.collidepoint(event.pos):
+                    index = self.scroll + (event.pos[1] - lst.y - 2) // self._row_height()
+                    if 0 <= index < len(shown):
+                        self._choose(index)
+                elif not (self.editable and r.collidepoint(event.pos)):
+                    self._close()      # (editable: clicking the box keeps typing)
+                return True            # clicks while open never reach other widgets
+            return False
+        if _clicked(event, r) and self.values:
+            self._open()
+            return True
+        return False
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        r = self.get_rect(offset)
+        font = self._font()
+        pg.draw.rect(screen, self.cget("bg"), r)
+        pg.draw.rect(screen, self.cget("border_color"), r, 2)
+        if self.typed is not None and self.is_open:
+            # editable and typing: show the typed words and a cursor
+            # (the current value in grey until something is typed)
+            room = r.width - 34              # the box, less the padding and the arrow
+            if self.typed:
+                # Too long? Show the END of the typed words, so the cursor stays in view
+                shown = self.typed
+                while len(shown) > 1 and font.size(shown)[0] > room:
+                    shown = shown[1:]
+                surface = font.render(shown, True, self._text_colour())
+            else:
+                words = _fit_text(font, self.get(), room)
+                surface = font.render(words, True, self.cget("disabled_fg"))
+            screen.blit(surface, (r.x + 6, r.centery - surface.get_height() // 2))
+            cursor_x = r.x + 6 + (surface.get_width() if self.typed else 0)
+            pg.draw.line(screen, self.cget("fg"), (cursor_x, r.y + 6), (cursor_x, r.bottom - 6), 2)
+        else:
+            # A long value ends in "..." so it stops before the arrow
+            words = _fit_text(font, self.get(), r.width - 34)
+            surface = font.render(words, True, self._text_colour())
+            screen.blit(surface, (r.x + 6, r.centery - surface.get_height() // 2))
+        # Arrow
+        cx, cy = r.right - 14, r.centery
+        pg.draw.polygon(screen, self._text_colour(),
+                        [(cx - 6, cy - 3), (cx + 6, cy - 3), (cx, cy + 4)])
+        self._draw_focus(screen, r)
+        if self.is_open:
+            self.draw_overlay(screen, offset)
+
+    def draw_overlay(self, screen, offset=(0, 0)):
+        """Draw the open list (Frames call this last so it is on top)."""
+        if not (self.visible and self.is_open):
+            return
+        r = self.get_rect(offset)
+        lst = self._list_rect(r)
+        font = self._font()
+        row_h = self._row_height()
+        shown = self._shown_values()
+        pg.draw.rect(screen, self.cget("bg"), lst)
+        if not shown:                         # editable: nothing matches what was typed
+            surface = font.render("(no match - Enter keeps it)", True, self.cget("disabled_fg"))
+            screen.blit(surface, (lst.x + 6, lst.y + 4))
+        for row in range(min(self.max_rows, len(shown))):
+            index = self.scroll + row
+            if index >= len(shown):
+                break
+            row_rect = pg.Rect(lst.x + 2, lst.y + 2 + row * row_h, lst.width - 4, row_h)
+            colour = self.cget("fg")
+            if index == self.highlight:
+                pg.draw.rect(screen, self.cget("select_bg"), row_rect)
+                colour = self.cget("select_fg")
+            words = _fit_text(font, shown[index], row_rect.width - 8)
+            surface = font.render(words, True, colour)
+            screen.blit(surface, (row_rect.x + 4, row_rect.centery - surface.get_height() // 2))
+        pg.draw.rect(screen, self.cget("border_color"), lst, 2)
+
+
+# ================================
+# Progressbar Class
+# ================================
+
+class Progressbar(Widget):
+    """
+    A bar that fills up (like ttk.Progressbar). Great for health, energy,
+    timers and loading screens.
+
+    Parameters:
+        x, y        - position
+        length      - length of the bar
+        thickness   - thickness of the bar
+        orient      - "horizontal" or "vertical" (vertical fills from the bottom)
+        maximum     - the value that means "full"
+        value       - starting value
+        variable    - an IntVar / DoubleVar holding the value
+        mode        - "determinate" (shows the value) or "indeterminate"
+                      (a block that moves back and forth, for "loading...")
+        bar_color   - colour of the filled part
+        trough_color - colour of the empty part
+        border_color, border_width, border_radius
+        show_text   - True to show the percentage in the bar
+        bar_image, trough_image - optional pictures for the full and empty parts
+        low_color   - bar colour when it is nearly empty (None = never changes)
+        low_at      - how empty counts as "nearly empty": 0.25 = a quarter left
+        animate     - True: when the value drops, the lost part stays for a
+                      moment as a light "ghost", then shrinks away; when it
+                      goes up, the bar slides up. Works without update(tick).
+        ghost_color - colour of the ghost part
+
+    Example:
+        health = Progressbar(20, 20, 200, maximum=100, value=100, bar_color=(220, 50, 50))
+        health.config(value=health.value - 10)     # or health.step(-10)
+        energy = Progressbar(20, 60, 200, value=100, low_color=(220, 50, 50),
+                             animate=True)
+    """
+
+    GHOST_WAIT = 400        # ms the ghost stays still before shrinking
+    SLIDE_MS = 600          # ms to slide from empty to full (animate=True)
+
+    def __init__(self, x, y=0, length=200, thickness=20, orient="horizontal",
+                 maximum=100, value=0, variable=None, mode="determinate",
+                 bar_color=None, bar_colour=None, trough_color=None, trough_colour=None,
+                 border_color=None, border_colour=None, border_width=None,
+                 border_radius=None, show_text=False, fg=None,
+                 bar_image=None, trough_image=None, font_name=None, font_size=None,
+                 center=False, visible=True, style=None,
+                 low_color=None, low_colour=None, low_at=0.25, animate=False,
+                 ghost_color=None, ghost_colour=None, cursor=None, font_style=None):
+        super().__init__(x, y, center=center, visible=visible, style=style)
+        self.cursor = cursor
+        self.length = length
+        self.thickness = thickness
+        self.orient = orient
+        self.maximum = maximum
+        self.variable = variable if variable is not None else DoubleVar(value)
+        self.mode = mode
+        self.bar_color = _pick(bar_color, bar_colour)
+        self.trough_color = _pick(trough_color, trough_colour)
+        self.border_color = _pick(border_color, border_colour)
+        self.border_width = border_width
+        self.border_radius = border_radius
+        self.show_text = show_text
+        self.fg = fg
+        self.bar_image = bar_image
+        self.trough_image = trough_image
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.running = mode == "indeterminate"
+        self._bounce = 0.0           # position of the moving block (indeterminate)
+        self.low_color = _pick(low_color, low_colour)
+        self.low_at = low_at
+        self.animate = animate
+        self.ghost_color = _pick(ghost_color, ghost_colour)
+        self._shown = None           # animate=True: the value the bar shows right now
+        self._ghost = None           # animate=True: where the ghost ends
+        self._ghost_since = 0
+        self._last_draw = 0
+        self._refresh()
+
+    def _refresh(self):
+        if self.orient == "vertical":
+            self.width, self.height = self.thickness, self.length
+        else:
+            self.width, self.height = self.length, self.thickness
+
+    # value works like an option: bar.value, bar.config(value=50)
+    @property
+    def value(self):
+        return self.variable.get()
+
+    @value.setter
+    def value(self, new_value):
+        self.variable.set(max(0, min(self.maximum, new_value)))
+
+    def step(self, amount=1):
+        """Add amount to the value (use a negative number to go down)."""
+        self.value = self.value + amount
+
+    def fraction(self):
+        """How full the bar is, from 0.0 to 1.0."""
+        return 0 if not self.maximum else self.value / self.maximum
+
+    def start(self):
+        """Start the moving block (indeterminate mode)."""
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+    def update(self, tick):
+        if self.mode == "indeterminate" and self.running:
+            self._bounce = (self._bounce + tick / 1500) % 2      # 1.5 s each way
+
+    def _animate_values(self):
+        """
+        animate=True: move the shown value and the ghost towards the real value.
+        Uses the clock (not update), so it works in draw() on its own.
+        """
+        now = pg.time.get_ticks()
+        target = self.value
+        if self._shown is None:                 # first time: no animation
+            self._shown, self._ghost, self._last_draw = target, target, now
+        ms = min(100, now - self._last_draw)    # a long pause doesn't jump
+        self._last_draw = now
+        step = self.maximum * ms / self.SLIDE_MS
+        if target < self._shown:                # lost some: the ghost keeps the old value
+            self._ghost = max(self._ghost, self._shown)
+            self._shown = target
+            self._ghost_since = now
+        elif target > self._shown:              # gained some: slide up
+            self._shown = min(target, self._shown + step)
+        if self._ghost > self._shown and now - self._ghost_since > self.GHOST_WAIT:
+            self._ghost = max(self._shown, self._ghost - step)
+        self._ghost = max(self._ghost, self._shown)
+
+    def _part_rect(self, r, start, size):
+        """The rect for a part of the bar (start and size are fractions 0 - 1)."""
+        if self.orient == "vertical":
+            return pg.Rect(r.x, r.bottom - int(r.height * (start + size)),
+                           r.width, int(r.height * size))
+        return pg.Rect(r.x + int(r.width * start), r.y, int(r.width * size), r.height)
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()
+        r = self.get_rect(offset)
+        radius = self.cget("border_radius") or 0
+        vertical = self.orient == "vertical"
+
+        # Empty part
+        if self.trough_image is not None:
+            screen.blit(load_image(self.trough_image, r.size), r)
+        else:
+            pg.draw.rect(screen, self.cget("trough_color"), r, border_radius=radius)
+
+        # Filled part
+        ghost = None
+        if self.mode == "indeterminate":
+            block = 0.3
+            position = self._bounce if self._bounce <= 1 else 2 - self._bounce
+            start, size = position * (1 - block), block
+        elif self.animate and self.maximum:
+            self._animate_values()
+            start, size = 0, self._shown / self.maximum
+            ghost = self._part_rect(r, size, (self._ghost - self._shown) / self.maximum)
+        else:
+            start, size = 0, self.fraction()
+        fill = self._part_rect(r, start, size)
+
+        # The ghost: the part just lost, drawn lighter (animate=True)
+        if ghost is not None and ghost.width > 0 and ghost.height > 0:
+            if self.bar_image is not None:
+                faded = load_image(self.bar_image, r.size).copy()
+                faded.set_alpha(110)
+                screen.blit(faded, ghost, area=ghost.move(-r.x, -r.y))
+            else:
+                pg.draw.rect(screen, self.cget("ghost_color"), ghost, border_radius=radius)
+
+        if fill.width > 0 and fill.height > 0:
+            if self.bar_image is not None:
+                full = load_image(self.bar_image, r.size)
+                screen.blit(full, fill, area=fill.move(-r.x, -r.y))
+            else:
+                colour = self.cget("bar_color")
+                if self.low_color is not None and self.fraction() <= self.low_at:
+                    colour = self.low_color          # nearly empty: warning colour
+                pg.draw.rect(screen, colour, fill, border_radius=radius)
+
+        # Border and text
+        border_width = self.cget("border_width") or 0
+        if border_width and self.trough_image is None:
+            pg.draw.rect(screen, self.cget("border_color"), r, border_width,
+                         border_radius=radius)
+        if self.show_text and self.mode == "determinate":
+            font = get_font(self.cget("font_name"), max(12, min(self.cget("font_size"),
+                                                                 self.thickness)),
+                            self.cget("font_style"))
+            words = font.render(f"{int(self.fraction() * 100)}%", True, self.cget("fg"))
+            screen.blit(words, words.get_rect(center=r.center))
+
+
+# ================================
+# Container base class (Frame, LabelFrame, Notebook, Popup)
+# ================================
+
+class Container(Widget):
+    """
+    The base for widgets that hold other widgets.
+    Children's x, y are measured from the inside top-left corner
+    (after the padding), and they move, hide and update with the container.
+    """
+
+    def __init__(self, x, y, width, height, bg=None, border_color=None, border_width=None,
+                 pad_x=10, pad_y=10, center=False, visible=True, style=None, cursor=None):
+        super().__init__(x, y, width or 0, height or 0, center, visible, style)
+        self.cursor = cursor
+        self._auto_size = (width is None, height is None)   # None = fit the children
+        self.bg = bg
+        self.border_color = border_color
+        self.border_width = border_width
+        self.pad_x = pad_x
+        self.pad_y = pad_y
+        self.children = []
+        self.top_space = 0          # extra space at the top (title bars, tabs)
+        self.debug_layout = False   # True: always show the layout debug view
+        self._col_config = {}
+        self._row_config = {}
+        self._debug_info = {"kind": None, "warnings": []}
+
+    def add(self, *widgets):
+        """Add one or more widgets, e.g. frame.add(label, button)."""
+        for widget in widgets:
+            self.children.append(widget)
+            widget.parent = self
+        return widgets[0] if len(widgets) == 1 else widgets
+
+    def child_offset(self, offset=(0, 0)):
+        """Where the children's (0, 0) is on screen."""
+        r = self.get_rect(offset)
+        return (r.x + self.pad_x, r.y + self.pad_y + self.top_space)
+
+    def _visible_children(self):
+        # Widgets made inside a Frame are only shown once they have
+        # grid() / pack() / place(), just like tkinter
+        return [c for c in self.children if c._layout or not c._made_in_parent]
+
+    def has_open_popup(self):
+        """True if a drop-down inside is open (it gets the mouse first)."""
+        for child in self._visible_children():
+            if getattr(child, "is_open", False):
+                return True
+            if isinstance(child, Container) and child.has_open_popup():
+                return True
+        return False
+
+    def draw_children(self, screen, offset=(0, 0)):
+        inside = self.child_offset(offset)
+        children = self._visible_children()
+        for child in children:
+            child.draw(screen, inside)
+        # Open drop-down lists are drawn last so they are on top
+        for child in children:
+            if hasattr(child, "draw_overlay"):
+                child.draw_overlay(screen, inside)
+        self._draw_layout_debug(screen, offset)
+
+    def draw_overlay(self, screen, offset=(0, 0)):
+        if self.visible:
+            inside = self.child_offset(offset)
+            for child in self._visible_children():
+                if hasattr(child, "draw_overlay"):
+                    child.draw_overlay(screen, inside)
+
+    def handle_event(self, event, offset=(0, 0)):
+        """Pass the event to the children. Returns True if one of them used it."""
+        if not self.visible:
+            return False
+        if self.closing:                     # fading out: no more clicks
+            return False
+        self._last_offset = offset
+        self._arrange()
+        inside = self.child_offset(offset)
+        children = self._visible_children()
+        # An open drop-down gets the event first
+        for child in children:
+            if getattr(child, "is_open", False) or \
+                    (isinstance(child, Container) and child.has_open_popup()):
+                return bool(child.handle_event(event, inside))
+        for child in children:
+            if child.handle_event(event, inside):
+                return True
+        return False
+
+    def update(self, tick):
+        if not self.visible:
+            return
+        self._arrange()
+        for child in self._visible_children():
+            child.update(tick)
+
+    def _draw_box(self, screen, r, radius=0):
+        if self.cget("bg"):                 # None or "" = see-through
+            pg.draw.rect(screen, self.cget("bg"), r, border_radius=radius)
+        border_width = self.cget("border_width") or 0
+        if border_width > 0 and self.cget("border_color"):
+            pg.draw.rect(screen, self.cget("border_color"), r, border_width,
+                         border_radius=radius)
+
+
+
+    # ================================================================
+    # Layout managers: grid / pack / place  (and the F1 debug view)
+    # ================================================================
+    def columnconfigure(self, column, weight=0, minsize=0):
+        """Like tkinter: weight=1 makes this column take spare space."""
+        self._col_config[column] = (weight, minsize)
+
+    def rowconfigure(self, row, weight=0, minsize=0):
+        self._row_config[row] = (weight, minsize)
+
+    grid_columnconfigure = columnconfigure
+    grid_rowconfigure = rowconfigure
+
+    def _inner_size(self):
+        """Space for the children inside the padding (None if the size isn't set)."""
+        r = self.get_rect()
+        if self._auto_size[0] and self._layout_size is None:
+            w = None
+        else:
+            w = r.width - 2 * self.pad_x
+        if self._auto_size[1] and self._layout_size is None:
+            h = None
+        else:
+            h = r.height - 2 * self.pad_y - self.top_space
+        return w, h
+
+    @staticmethod
+    def _natural(widget):
+        """The size a widget wants (before any stretching)."""
+        widget._refresh()
+        if isinstance(widget, Container):
+            widget._arrange()
+        return widget.width, widget.height
+
+    @staticmethod
+    def _stretchable(widget):
+        """Widgets whose drawing follows their rect, so they can be stretched."""
+        return isinstance(widget, (Label, Button, Container, Separator))
+
+    def _arrange(self):
+        """Work out where every grid / pack / place child goes."""
+        managed = [c for c in self.children if c._layout and c.visible]
+        self._debug_info = {"kind": None, "warnings": []}
+        warnings = self._debug_info["warnings"]
+        for child in self.children:
+            if child._made_in_parent and child._layout is None:
+                warnings.append(f"{child._describe()} has no grid() / pack() / place() "
+                                f"- it is not shown")
+        if not managed:
+            if any(self._auto_size):
+                self.width = self.width or 100
+                self.height = self.height or 60
+            self._show_warnings()
+            return
+        kinds = {c._layout[0] for c in managed}
+        avail_w, avail_h = self._inner_size()
+        used_w = used_h = 0
+        if "grid" in kinds:
+            used_w, used_h = self._arrange_grid([c for c in managed if c._layout[0] == "grid"],
+                                                avail_w, avail_h)
+        elif "pack" in kinds:
+            used_w, used_h = self._arrange_pack([c for c in managed if c._layout[0] == "pack"],
+                                                avail_w, avail_h)
+        placed = [c for c in managed if c._layout[0] == "place"]
+        if placed:
+            self._arrange_place(placed, avail_w if avail_w is not None else used_w,
+                                avail_h if avail_h is not None else used_h)
+        # A Frame made without a width / height grows to fit
+        if self._auto_size[0]:
+            self.width = used_w + 2 * self.pad_x
+        if self._auto_size[1]:
+            self.height = used_h + 2 * self.pad_y + self.top_space
+        if avail_w is not None and used_w > avail_w + 1:
+            warnings.append(f"The layout is {used_w}px wide but there is only {avail_w}px "
+                            f"- some widgets don't fit")
+        if avail_h is not None and used_h > avail_h + 1:
+            warnings.append(f"The layout is {used_h}px tall but there is only {avail_h}px "
+                            f"- some widgets don't fit")
+        self._show_warnings()
+
+    def _show_warnings(self):
+        """Print each layout warning once in the console."""
+        for message in self._debug_info["warnings"]:
+            if message not in Layout._printed:
+                Layout._printed.add(message)
+                print("Layout warning:", message)
+
+    # ---- grid ----
+    def _arrange_grid(self, children, avail_w, avail_h):
+        info = [(c, c._layout[1]) for c in children]
+        cols = max(o["column"] + o["columnspan"] for c, o in info)
+        rows = max(o["row"] + o["rowspan"] for c, o in info)
+        col_w = [self._col_config.get(i, (0, 0))[1] for i in range(cols)]
+        row_h = [self._row_config.get(i, (0, 0))[1] for i in range(rows)]
+        sizes = {}
+        for child, o in info:
+            w, h = self._natural(child)
+            px, py = _pads(o["padx"]), _pads(o["pady"])
+            sizes[child] = (w + sum(px), h + sum(py))
+        # Single cells first, then spread anything spanning several cells
+        for span_pass in (False, True):
+            for child, o in info:
+                need_w, need_h = sizes[child]
+                c, r, cs, rs = o["column"], o["row"], o["columnspan"], o["rowspan"]
+                if (cs > 1) == span_pass:
+                    have = sum(col_w[c:c + cs])
+                    if need_w > have:
+                        for i in range(c, c + cs):
+                            col_w[i] += (need_w - have) / cs
+                if (rs > 1) == span_pass:
+                    have = sum(row_h[r:r + rs])
+                    if need_h > have:
+                        for i in range(r, r + rs):
+                            row_h[i] += (need_h - have) / rs
+        # Spare space goes to columns / rows with a weight
+        for sizes_list, avail, config in ((col_w, avail_w, self._col_config),
+                                          (row_h, avail_h, self._row_config)):
+            if avail is None:
+                continue
+            spare = avail - sum(sizes_list)
+            weights = [config.get(i, (0, 0))[0] for i in range(len(sizes_list))]
+            if spare > 0 and sum(weights) > 0:
+                for i, weight in enumerate(weights):
+                    sizes_list[i] += spare * weight / sum(weights)
+        col_x = [sum(col_w[:i]) for i in range(cols)]
+        row_y = [sum(row_h[:i]) for i in range(rows)]
+
+        cells, taken = [], {}
+        warnings = self._debug_info["warnings"]
+        for child, o in info:
+            c, r, cs, rs = o["column"], o["row"], o["columnspan"], o["rowspan"]
+            for rr in range(r, r + rs):
+                for cc in range(c, c + cs):
+                    if (rr, cc) in taken:
+                        warnings.append(f"{child._describe()} and {taken[(rr, cc)]._describe()} "
+                                        f"are both in row {rr}, column {cc}")
+                    taken[(rr, cc)] = child
+            cell = pg.Rect(round(col_x[c]), round(row_y[r]),
+                           round(sum(col_w[c:c + cs])), round(sum(row_h[r:r + rs])))
+            (pl, pr), (pt, pb) = _pads(o["padx"]), _pads(o["pady"])
+            area = pg.Rect(cell.x + pl, cell.y + pt, cell.width - pl - pr, cell.height - pt - pb)
+            self._put_in_area(child, area, o["sticky"])
+            cells.append((child, cell, area))
+        self._debug_info.update(kind="grid", col_x=col_x, col_w=col_w, row_y=row_y,
+                                row_h=row_h, cells=cells)
+        return round(sum(col_w)), round(sum(row_h))
+
+    def _put_in_area(self, child, area, sticky):
+        """Place a child inside its cell, using sticky like tkinter."""
+        w, h = child.width, child.height
+        stretch_w = "e" in sticky and "w" in sticky and self._stretchable(child)
+        stretch_h = "n" in sticky and "s" in sticky and self._stretchable(child)
+        if stretch_w:
+            w = area.width
+        if stretch_h:
+            h = area.height
+        if "w" in sticky:
+            x = area.x
+        elif "e" in sticky:
+            x = area.right - w
+        else:
+            x = area.centerx - w // 2
+        if "n" in sticky:
+            y = area.y
+        elif "s" in sticky:
+            y = area.bottom - h
+        else:
+            y = area.centery - h // 2
+        child.center = False
+        child.x, child.y = x, y
+        child._layout_size = (w, h) if (stretch_w or stretch_h) else None
+
+    # ---- pack ----
+    def _arrange_pack(self, children, avail_w, avail_h):
+        info = []
+        for child in children:
+            o = child._layout[1]
+            w, h = self._natural(child)
+            px, py = _pads(o["padx"]), _pads(o["pady"])
+            info.append((child, o, w + sum(px), h + sum(py)))
+        vertical = [i for i in info if i[1]["side"] in ("top", "bottom")]
+        horizontal = [i for i in info if i[1]["side"] in ("left", "right")]
+        need_w = max([i[2] for i in vertical] + [0]) + sum(i[2] for i in horizontal)
+        need_h = sum(i[3] for i in vertical) + max([i[3] for i in horizontal] + [0])
+        width = avail_w if avail_w is not None else need_w
+        height = avail_h if avail_h is not None else need_h
+        # Spare space for expand=True
+        extra_v = max(0, height - need_h)
+        extra_h = max(0, width - need_w)
+        n_v = sum(1 for i in vertical if i[1]["expand"])
+        n_h = sum(1 for i in horizontal if i[1]["expand"])
+
+        cavity = pg.Rect(0, 0, width, height)
+        parcels = []
+        for child, o, w, h in info:
+            side = o["side"]
+            if side in ("top", "bottom"):
+                ph = h + (extra_v / n_v if o["expand"] and n_v else 0)
+                if side == "top":
+                    parcel = pg.Rect(cavity.x, cavity.y, cavity.width, round(ph))
+                    cavity.y += parcel.height
+                else:
+                    parcel = pg.Rect(cavity.x, cavity.bottom - round(ph), cavity.width, round(ph))
+                cavity.height -= parcel.height
+            else:
+                pw = w + (extra_h / n_h if o["expand"] and n_h else 0)
+                if side == "left":
+                    parcel = pg.Rect(cavity.x, cavity.y, round(pw), cavity.height)
+                    cavity.x += parcel.width
+                else:
+                    parcel = pg.Rect(cavity.right - round(pw), cavity.y, round(pw), cavity.height)
+                cavity.width -= parcel.width
+            (pl, pr), (pt, pb) = _pads(o["padx"]), _pads(o["pady"])
+            area = pg.Rect(parcel.x + pl, parcel.y + pt, parcel.width - pl - pr,
+                           parcel.height - pt - pb)
+            fill = o["fill"] or ""
+            sticky = {"n": "n", "s": "s", "e": "e", "w": "w", "ne": "ne", "nw": "nw",
+                      "se": "se", "sw": "sw", "center": ""}.get(o["anchor"], "")
+            if fill in ("x", "both"):
+                sticky += "ew"
+            if fill in ("y", "both"):
+                sticky += "ns"
+            self._put_in_area(child, area, sticky)
+            parcels.append((child, parcel, area))
+        self._debug_info.update(kind="pack", cells=parcels)
+        return need_w if avail_w is None else max(need_w, 0), need_h if avail_h is None else need_h
+
+    # ---- place ----
+    def _arrange_place(self, children, width, height):
+        anchors = {"nw": (0, 0), "n": (0.5, 0), "ne": (1, 0), "w": (0, 0.5),
+                   "center": (0.5, 0.5), "e": (1, 0.5), "sw": (0, 1), "s": (0.5, 1),
+                   "se": (1, 1)}
+        points = []
+        for child in children:
+            o = child._layout[1]
+            w, h = self._natural(child)
+            px = o["relx"] * width + o["x"]
+            py = o["rely"] * height + o["y"]
+            ax, ay = anchors.get(o["anchor"], (0, 0))
+            child.center = False
+            child.x, child.y = round(px - ax * w), round(py - ay * h)
+            child._layout_size = None
+            points.append((child, (px, py)))
+        self._debug_info.setdefault("points", points)
+        self._debug_info["points"] = points
+
+    # ---- debug view (F1, or frame.debug_layout = True) ----
+    def _draw_layout_debug(self, screen, offset=(0, 0)):
+        if not (Debug.on or self.debug_layout) or not hasattr(self, "_debug_info"):
+            return
+        info = self._debug_info
+        ox, oy = self.child_offset(offset)
+        small = get_font(None, 16)
+        cyan, pink, yellow, red = (0, 220, 255), (255, 80, 200), (255, 220, 0), (255, 70, 70)
+
+        # The inside of the frame
+        avail_w, avail_h = self._inner_size()
+        if avail_w and avail_h:
+            pg.draw.rect(screen, (150, 150, 150), (ox, oy, avail_w, avail_h), 1)
+
+        if info.get("kind") == "grid":
+            col_x, col_w, row_y, row_h = info["col_x"], info["col_w"], info["row_y"], info["row_h"]
+            total_w, total_h = sum(col_w), sum(row_h)
+            for i, x in enumerate(col_x + [total_w]):
+                pg.draw.line(screen, cyan, (ox + x, oy), (ox + x, oy + total_h))
+            for i, y in enumerate(row_y + [total_h]):
+                pg.draw.line(screen, cyan, (ox, oy + y), (ox + total_w, oy + y))
+            for i, x in enumerate(col_x):
+                weight = self._col_config.get(i, (0, 0))[0]
+                text = f"col {i}" + (f" w{weight}" if weight else "")
+                screen.blit(small.render(text, True, cyan), (ox + x + 2, oy - 14))
+            for i, y in enumerate(row_y):
+                weight = self._row_config.get(i, (0, 0))[0]
+                text = f"row {i}" + (f" w{weight}" if weight else "")
+                label = small.render(text, True, cyan)
+                screen.blit(label, (ox - label.get_width() - 3, oy + y + 2))
+        if info.get("kind") in ("grid", "pack"):
+            shade = pg.Surface((1, 1), pg.SRCALPHA)
+            for n, (child, cell, area) in enumerate(info["cells"]):
+                cell_s = cell.move(ox, oy)
+                area_s = area.move(ox, oy)
+                # Padding = the part of the cell outside the area (yellow)
+                if cell_s.size != area_s.size:
+                    pad_surface = pg.Surface(cell_s.size, pg.SRCALPHA)
+                    pad_surface.fill((255, 220, 0, 55))
+                    pad_surface.fill((0, 0, 0, 0), area_s.move(-cell_s.x, -cell_s.y))
+                    screen.blit(pad_surface, cell_s)
+                if info["kind"] == "pack":
+                    pg.draw.rect(screen, (255, 160, 0), cell_s, 1)
+                    tag = f"{n + 1}:{child._layout[1]['side']}"
+                    screen.blit(small.render(tag, True, (255, 160, 0)), (cell_s.x + 2, cell_s.y + 1))
+                r = child.get_rect((ox, oy))
+                pg.draw.rect(screen, pink, r, 1)
+                if info["kind"] == "grid":
+                    o = child._layout[1]
+                    tag = f"({o['row']},{o['column']})"
+                    screen.blit(small.render(tag, True, pink), (r.x + 1, r.bottom - 12))
+                    # Sticky arrows
+                    for side, (dx, dy) in {"n": (0, -1), "s": (0, 1), "e": (1, 0),
+                                           "w": (-1, 0)}.items():
+                        if side in o["sticky"]:
+                            start = pg.Vector2(r.center)
+                            end = pg.Vector2(r.centerx + dx * r.width // 2,
+                                             r.centery + dy * r.height // 2)
+                            pg.draw.line(screen, pink, start, end, 1)
+                            pg.draw.circle(screen, pink, end, 3)
+        for child, point in info.get("points", []):
+            px, py = ox + point[0], oy + point[1]
+            pg.draw.line(screen, (120, 255, 120), (px - 6, py), (px + 6, py))
+            pg.draw.line(screen, (120, 255, 120), (px, py - 6), (px, py + 6))
+            pg.draw.rect(screen, (120, 255, 120), child.get_rect((ox, oy)), 1)
+
+        # Warnings, in red at the bottom of the frame
+        r = self.get_rect(offset)
+        y = r.bottom + 2
+        for message in info["warnings"]:
+            screen.blit(small.render("! " + message, True, red), (r.x, y))
+            y += 14
+
+        # Hover a widget to see its layout settings
+        mouse = pg.mouse.get_pos()
+        for child in self.children:
+            if child._layout and child.get_rect((ox, oy)).collidepoint(mouse):
+                kind, options = child._layout
+                words = f"{child._describe()}  {kind}(" + ", ".join(
+                    f"{k}={v!r}" for k, v in options.items()) + ")"
+                label = small.render(words, True, WHITE)
+                box = label.get_rect(topleft=(mouse[0] + 14, mouse[1] + 14)).inflate(8, 6)
+                pg.draw.rect(screen, (20, 20, 30), box)
+                pg.draw.rect(screen, pink, box, 1)
+                screen.blit(label, (box.x + 4, box.y + 3))
+
+    def layout_report(self):
+        """Print a table of every widget's grid / pack / place settings."""
+        self._arrange()
+        print(f"Layout of {self._describe()}  (inside size: {self._inner_size()})")
+        for child in self.children:
+            if child._layout:
+                kind, options = child._layout
+                r = child.get_rect()
+                print(f"  {child._describe():<28} {kind}({', '.join(f'{k}={v!r}' for k, v in options.items())})"
+                      f"  -> x={r.x}, y={r.y}, {r.width}x{r.height}")
+            else:
+                print(f"  {child._describe():<28} x={child.x}, y={child.y}"
+                      + ("   (NOT SHOWN: no grid/pack/place)" if child._made_in_parent else ""))
+        for message in self._debug_info["warnings"]:
+            print("  !", message)
+
+
+# ================================
+# Frame Class
+# ================================
+
+class Frame(Container):
+    """
+    A box that holds other widgets (like tkinter's Frame).
+    Widgets added to a Frame are positioned from the Frame's inside corner,
+    and are drawn, updated and hidden together with it.
+
+    Parameters:
+        x, y, width, height - position and size
+        bg            - background colour ("" = see-through)
+        border_color  - border colour (border_colour also works)
+        border_width  - border thickness (0 = no border)
+        pad_x, pad_y  - space between the edge and the children
+        center        - if True, (x, y) is the centre of the frame
+        style         - a named Style, e.g. "Menu.Frame"
+
+    width / height: leave them out and the Frame grows to fit widgets
+    laid out with grid() / pack() (like tkinter).
+
+    Example:
+        menu = Frame(50, 50, 300, 200)
+        menu.add(Label(0, 0, "Menu"), Button(0, 40, 120, 40, "Play"))
+    """
+
+    def __init__(self, x, y=0, width=None, height=None, bg=None,
+                 border_color=None, border_colour=None, border_width=None,
+                 pad_x=10, pad_y=10, center=False, visible=True, style=None, cursor=None):
+        super().__init__(x, y, width, height, bg, _pick(border_color, border_colour),
+                         border_width, pad_x, pad_y, center, visible, style)
+        self.cursor = cursor
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        if self._fade_layer(screen, offset):     # fading in / out
+            return
+        self._drawn(screen, offset)
+        self._arrange()
+        self._draw_box(screen, self.get_rect(offset))
+        self.draw_children(screen, offset)
+
+
+class Root(Frame):
+    """
+    A see-through Frame that fills the whole window - like tkinter's Tk().
+    Use it to grid() / pack() widgets straight onto the screen:
+
+        root = Root(screen)
+        Label(root, text="Score").grid(row=0, column=0)
+        root.handle_event(event)    root.update(tick)    root.draw(screen)
+    """
+
+    def __init__(self, screen, bg="", padding=0, cursor=None):
+        self.menu = None             # root.config(menu=menubar) - like tkinter
+        super().__init__(0, 0, screen.get_width(), screen.get_height(), bg=bg,
+                         border_width=0, pad_x=padding, pad_y=padding)
+        self.cursor = cursor
+
+    def _refresh(self):
+        if self.menu is not None:
+            self.menu.is_bar = True
+            self.menu.bar_width = self.width
+            self.top_space = self.menu.bar_height()
+        else:
+            self.top_space = 0
+
+    def handle_event(self, event, offset=(0, 0)):
+        if self.menu is not None and self.menu.handle_event(event):
+            return True
+        return super().handle_event(event, offset)
+
+    def draw(self, screen, offset=(0, 0)):
+        super().draw(screen, offset)
+        if self.menu is not None:
+            self.menu.draw(screen)           # the menu bar and open menus, on top
+
+
+# ================================
+# ScrolledFrame Class
+# ================================
+
+class ScrolledFrame(Frame):
+    """
+    A Frame whose contents can be longer than the Frame - scroll with the
+    mouse wheel or drag the scroll bar. Widgets outside the visible part are
+    hidden and can't be clicked.
+
+        levels = ScrolledFrame(root, width=300, height=250)
+        levels.grid(row=1, column=0)
+        for n in range(30):
+            Button(levels, text=f"Level {n}").grid(row=n, column=0, pady=4)
+
+    Parameters: the same as Frame (width / height are the visible size), plus
+        scrollbar_width - thickness of the scroll bar
+        scroll_speed    - pixels per mouse-wheel click
+        horizontal      - also scroll sideways (for wide contents)
+
+    Methods: see(widget), scroll_to(y), scroll_to_top(), scroll_to_bottom()
+    """
+
+    def __init__(self, x, y=0, width=300, height=200, scrollbar_width=12, scroll_speed=40,
+                 horizontal=False, **options):
+        super().__init__(x, y, width, height, **options)
+        self.scrollbar_width = scrollbar_width
+        self.scroll_speed = scroll_speed
+        self.horizontal = horizontal
+        self.scroll_x = 0
+        self.scroll_y = 0
+        self.content_w = 0
+        self.content_h = 0
+        self._dragging = None            # "y" / "x" while dragging a scroll bar
+        self._drag_start = (0, 0, 0)
+
+    # ---- sizes ----
+    def _viewport(self, offset=(0, 0)):
+        """The visible area for the children (on screen)."""
+        r = self.get_rect(offset)
+        h_bar = self.scrollbar_width if self.horizontal else 0
+        return pg.Rect(r.x + self.pad_x, r.y + self.pad_y + self.top_space,
+                       r.width - 2 * self.pad_x - self.scrollbar_width,
+                       r.height - 2 * self.pad_y - self.top_space - h_bar)
+
+    def _inner_size(self):
+        # Children can be as tall as they like (and as wide, if horizontal)
+        v = self._viewport()
+        return (None if self.horizontal else v.width), None
+
+    def _arrange(self):
+        super()._arrange()
+        bottom = right = 0
+        for child in self._visible_children():
+            r = child.get_rect()
+            bottom, right = max(bottom, r.bottom), max(right, r.right)
+        self.content_w, self.content_h = right, bottom
+        self._clamp()
+
+    def _max_scroll(self):
+        v = self._viewport()
+        return max(0, self.content_w - v.width), max(0, self.content_h - v.height)
+
+    def _clamp(self):
+        most_x, most_y = self._max_scroll()
+        self.scroll_x = max(0, min(most_x, self.scroll_x))
+        self.scroll_y = max(0, min(most_y, self.scroll_y))
+
+    def child_offset(self, offset=(0, 0)):
+        v = self._viewport(offset)
+        return (v.x - self.scroll_x, v.y - self.scroll_y)
+
+    # ---- scrolling ----
+    def scroll_to(self, y=None, x=None):
+        if y is not None:
+            self.scroll_y = y
+        if x is not None:
+            self.scroll_x = x
+        self._clamp()
+
+    def scroll_to_top(self):
+        self.scroll_to(y=0)
+
+    def scroll_to_bottom(self):
+        self._arrange()
+        self.scroll_to(y=self.content_h)
+
+    def see(self, widget):
+        """Scroll so that widget (inside this frame) can be seen."""
+        self._arrange()
+        r = widget.get_rect()
+        v = self._viewport()
+        if r.top < self.scroll_y:
+            self.scroll_y = r.top
+        elif r.bottom > self.scroll_y + v.height:
+            self.scroll_y = r.bottom - v.height
+        if self.horizontal:
+            if r.left < self.scroll_x:
+                self.scroll_x = r.left
+            elif r.right > self.scroll_x + v.width:
+                self.scroll_x = r.right - v.width
+        self._clamp()
+
+    def _bars(self, offset=(0, 0)):
+        """(track, thumb) for the vertical bar, and for the horizontal bar (or None)."""
+        v = self._viewport(offset)
+        track = pg.Rect(v.right, v.y, self.scrollbar_width, v.height)
+        size = max(20, track.height * min(1, v.height / max(1, self.content_h)))
+        most = self._max_scroll()[1]
+        y = track.y + (track.height - size) * (self.scroll_y / most if most else 0)
+        thumb = pg.Rect(track.x + 2, round(y), self.scrollbar_width - 4, round(size))
+        h = None
+        if self.horizontal:
+            h_track = pg.Rect(v.x, v.bottom, v.width, self.scrollbar_width)
+            h_size = max(20, h_track.width * min(1, v.width / max(1, self.content_w)))
+            most_x = self._max_scroll()[0]
+            hx = h_track.x + (h_track.width - h_size) * (self.scroll_x / most_x if most_x else 0)
+            h = (h_track, pg.Rect(round(hx), h_track.y + 2, round(h_size), self.scrollbar_width - 4))
+        return (track, thumb), h
+
+    # ---- game loop ----
+    def handle_event(self, event, offset=(0, 0)):
+        if not self.visible:
+            return False
+        if self.closing:                     # fading out: no more clicks
+            return False
+        self._last_offset = offset
+        self._arrange()
+        v = self._viewport(offset)
+        (track, thumb), h = self._bars(offset)
+        mouse = getattr(event, "pos", pg.mouse.get_pos())
+
+        # Scroll bars
+        if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+            if thumb.collidepoint(mouse):
+                self._dragging = "y"
+                self._drag_start = (mouse[1], self.scroll_y, track.height - thumb.height)
+                return True
+            if track.collidepoint(mouse):
+                page = v.height * (1 if mouse[1] > thumb.centery else -1)
+                self.scroll_to(y=self.scroll_y + page)
+                return True
+            if h and h[1].collidepoint(mouse):
+                self._dragging = "x"
+                self._drag_start = (mouse[0], self.scroll_x, h[0].width - h[1].width)
+                return True
+        if event.type == pg.MOUSEMOTION and self._dragging:
+            start, scroll, room = self._drag_start
+            moved = (mouse[1] if self._dragging == "y" else mouse[0]) - start
+            most_x, most_y = self._max_scroll()
+            most = most_y if self._dragging == "y" else most_x
+            amount = scroll + (moved / room * most if room else 0)
+            self.scroll_to(**({"y": amount} if self._dragging == "y" else {"x": amount}))
+            return True
+        if event.type == pg.MOUSEBUTTONUP and self._dragging:
+            self._dragging = None
+            return True
+
+        # Mouse wheel over the frame
+        if event.type == pg.MOUSEWHEEL and self.get_rect(offset).collidepoint(pg.mouse.get_pos()):
+            # Let an open drop-down / list inside use the wheel first
+            if self.has_open_popup() and super().handle_event(event, offset):
+                return True
+            if self.horizontal and (getattr(event, "x", 0) or pg.key.get_mods() & pg.KMOD_SHIFT):
+                self.scroll_to(x=self.scroll_x - (event.x or event.y) * self.scroll_speed)
+            else:
+                self.scroll_to(y=self.scroll_y - event.y * self.scroll_speed)
+            return True
+
+        # Clicks outside the visible part don't reach hidden widgets
+        if event.type in (pg.MOUSEBUTTONDOWN, pg.MOUSEMOTION) and not v.collidepoint(mouse) \
+                and not self.has_open_popup():
+            return False
+        return super().handle_event(event, offset)
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        if self._fade_layer(screen, offset):     # fading in / out
+            return
+        self._drawn(screen, offset)
+        self._arrange()
+        self._draw_box(screen, self.get_rect(offset))
+        v = self._viewport(offset)
+        old_clip = screen.get_clip()
+        screen.set_clip(v.clip(old_clip) if old_clip else v)
+        inside = self.child_offset(offset)
+        children = self._visible_children()
+        for child in children:
+            child.draw(screen, inside)
+        screen.set_clip(old_clip)
+        for child in children:                          # open drop-downs on top, not clipped
+            if hasattr(child, "draw_overlay"):
+                child.draw_overlay(screen, inside)
+
+        # Scroll bars
+        (track, thumb), h = self._bars(offset)
+        pg.draw.rect(screen, self.cget("trough_color"), track)
+        if self.content_h > v.height:
+            pg.draw.rect(screen, self.cget("accent"), thumb, border_radius=4)
+        if h:
+            pg.draw.rect(screen, self.cget("trough_color"), h[0])
+            if self.content_w > v.width:
+                pg.draw.rect(screen, self.cget("accent"), h[1], border_radius=4)
+
+        if Debug.on or self.debug_layout:
+            screen.set_clip(v.clip(old_clip) if old_clip else v)
+            self._draw_layout_debug(screen, offset)
+            screen.set_clip(old_clip)
+            pg.draw.rect(screen, (0, 255, 120), v, 2)
+            words = f"visible {v.width}x{v.height}  content {self.content_w}x{self.content_h}" \
+                    f"  scroll y={int(self.scroll_y)}"
+            screen.blit(get_font(None, 16).render(words, True, (0, 255, 120)), (v.x, v.y - 14))
+
+
+# ================================
+# Table Class (like ttk.Treeview)
+# ================================
+
+class Table(Widget):
+    """
+    Rows and columns, like ttk.Treeview. Click a row to select it, click a
+    heading to sort, double-click a cell to edit it (if editable).
+
+        scores = Table(root, columns=["Name", "Score"], rows=8, editable=["Score"])
+        scores.column("Score", width=80, anchor="e", type=int)
+        row = scores.insert(["Sam", 120])
+        scores.get_selected()          # ["Sam", 120] or None
+
+    Tree view (rows inside rows, like folders):
+        world = levels.insert(["World 1"], open=True)
+        levels.insert(["Level 1-1", "Done"], parent=world)
+
+    Parameters:
+        columns   - column names
+        rows      - how many rows show at once (it scrolls)
+        width     - total width (columns share it), or None to fit
+        command   - function to run when a row is selected
+        editable  - True (all columns), a list of column names, or False
+        on_edit   - function to run after a cell is changed (see table.last_edit)
+        tree      - True: show open / close arrows for rows inside rows
+        striped   - True: every other row is a little darker
+        edit_mode - "double_click" (default): double-click a cell to edit it
+                    "spreadsheet": click a cell to pick it, then just type
+                    (see below)
+        fg, bg, select_fg, select_bg, heading_bg, border_color, font_name,
+        font_size, style
+        max_width - widest a column grows to fit its contents (for columns
+                    with no width set): 300 pixels (default), another
+                    number, or "fit" (no limit). A column can have its own:
+                    table.column("Notes", max_width="fit")
+        resizable_columns - True: drag the line between two headings to
+                    change a column's width; double-click the line to fit
+                    the column to its contents (like Excel)
+        cell_tooltips - True: rest the mouse on a cell whose text is cut
+                    off ("...") to see all of it
+
+    Text that is too long for its cell ends in "...". table.autofit()
+    makes the columns fit their contents (no 300 pixel limit).
+
+    Spreadsheet mode (edit_mode="spreadsheet"), like Excel:
+        click a cell        pick it (it gets a yellow outline)
+        type                replace what is in the cell
+        double-click        edit the text that is already there
+        Enter or F2         edit the text that is already there
+        Enter (editing)     save and move down
+        Tab                 save and move right
+        arrow keys          move to another cell (saves first if editing)
+        Escape              stop editing without saving / let go of the cell
+        Delete              empty the cell
+    Only editable columns can be picked.
+
+    Methods (like Treeview): insert, delete, item, set, get, clear, load,
+    get_children, selection, selection_set, see, heading, column, sort_by,
+    autofit
+    """
+
+    takes_focus = True
+
+    def __init__(self, x, y=0, columns=("Value",), rows=8, width=None, command=None,
+                 editable=False, on_edit=None, tree=False, striped=True,
+                 fg=None, bg=None, select_fg=None, select_bg=None, heading_bg=None,
+                 font_name=None, font_size=None, center=False, visible=True,
+                 state="normal", style=None, border_color=None, border_colour=None,
+                 edit_mode="double_click", cursor=None, max_width=300,
+                 resizable_columns=False, cell_tooltips=False, font_style=None):
+        super().__init__(x, y, center=center, visible=visible, style=style, state=state)
+        self.cursor = cursor
+        self.max_width = max_width
+        self.resizable_columns = resizable_columns
+        self.cell_tooltips = cell_tooltips
+        self._resizing = None        # (column, mouse x, width) while dragging a column edge
+        self._edge_click = (0, None) # (time, column): to spot a double-click on an edge
+        self._tip = None             # (cell rect, full text, time the mouse got there)
+        self._changes = 0            # goes up when rows change (column widths are re-measured)
+        self._widths_cache = (None, None)
+        self.columns = list(columns)
+        self.rows = rows
+        self._given_width = width
+        self.command = command
+        self.on_edit = on_edit
+        self.tree = tree
+        self.striped = striped
+        self.fg = fg
+        self.bg = bg
+        self.select_fg = select_fg
+        self.select_bg = select_bg
+        self.heading_bg = heading_bg
+        self.border_color = _pick(border_color, border_colour)
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        if edit_mode not in ("double_click", "spreadsheet"):
+            raise ValueError('edit_mode must be "double_click" or "spreadsheet"')
+        self.edit_mode = edit_mode
+        self.cell = None             # (row, column) picked in spreadsheet mode
+        self.settings = {name: {"width": None, "anchor": "w", "type": None, "check": None,
+                                "editable": editable is True or
+                                (isinstance(editable, (list, tuple)) and name in editable),
+                                "heading": name, "sortable": True, "max_width": None}
+                         for name in self.columns}
+        self.items = {}              # id -> {"values", "parent", "children", "open"}
+        self.top_level = []          # ids of rows with no parent
+        self._next_id = 1
+        self.selected = None
+        self.scroll = 0
+        self.sorted_by = None        # (column, reverse)
+        self.editing = None          # {"row", "column", "text"} while typing in a cell
+        self.last_edit = None        # (row, column, old value, new value)
+        self.edit_error = None
+        self._last_click = (0, None, None)
+        self._refresh()
+
+    # ---- sizes ----
+    def _row_height(self):
+        return self._font().get_height() + 8
+
+    def _column_widths(self):
+        font = self._font()
+        # Measuring every cell is slow, so the answer is kept until something
+        # changes (rows, column settings, the font or the table's size)
+        key = (id(font), self._changes, self._given_width, self.max_width, self.tree,
+               tuple(tuple(sorted(self.settings[name].items(), key=lambda kv: kv[0]))
+                     for name in self.columns))
+        try:
+            if self._widths_cache[0] == key:
+                return list(self._widths_cache[1])
+        except TypeError:          # e.g. a check function that can't be compared
+            pass
+        widths = []
+        for name in self.columns:
+            s = self.settings[name]
+            if s["width"]:
+                widths.append(s["width"])
+                continue
+            longest = self._content_width(name)
+            limit = s["max_width"] if s["max_width"] is not None else self.max_width
+            if limit != "fit" and limit:         # "fit" or 0 = no limit
+                longest = min(longest, limit)
+            widths.append(longest)
+        if self.tree and widths:
+            widths[0] += 20 * (self._max_depth() + 1)
+        if self._given_width:
+            spare = self._given_width - self.BAR_SPACE - sum(widths)
+            widths[-1] = max(30, widths[-1] + spare)
+        self._widths_cache = (key, widths)
+        return list(widths)
+
+    def _content_width(self, name):
+        """Pixels needed to show the heading and every value in a column in full."""
+        font = self._font()
+        s = self.settings[name]
+        index = self.columns.index(name)
+        longest = font.size(str(s["heading"]))[0] + 24
+        for row in self.items.values():
+            value = row["values"][index] if index < len(row["values"]) else ""
+            longest = max(longest, font.size(str(value))[0] + 16)
+        return longest
+
+    def autofit(self, column=None):
+        """
+        Make a column (or every column) just wide enough for its contents,
+        with no 300 pixel limit. It is done once: call it again after
+        adding rows if you want it to fit again.
+            table.load(rows)
+            table.autofit()            # all columns
+            table.autofit("Notes")     # one column
+        """
+        names = self.columns if column is None else [column]
+        for name in names:
+            extra = 20 * (self._max_depth() + 1) if self.tree and name == self.columns[0] else 0
+            self.settings[name]["width"] = self._content_width(name) + extra
+        self._refresh()
+
+    def _max_depth(self):
+        def depth(i):
+            d = 0
+            while self.items[i]["parent"] is not None:
+                i = self.items[i]["parent"]
+                d += 1
+            return d
+        return max([depth(i) for i in self.items] + [0])
+
+    BAR_SPACE = 17      # room on the right for the scroll bar (2 + 13 + 2 pixels)
+
+    def _refresh(self):
+        self.width = self._given_width or sum(self._column_widths()) + self.BAR_SPACE
+        self.height = (self.rows + 1) * self._row_height() + 4
+
+    # ---- setting up columns ----
+    def heading(self, column, text=None, sortable=None):
+        """Change a heading's text, or turn sorting on / off for it."""
+        if text is not None:
+            self.settings[column]["heading"] = text
+        if sortable is not None:
+            self.settings[column]["sortable"] = sortable
+
+    def column(self, column, width=None, anchor=None, type=None, editable=None, check=None,
+               max_width=None):
+        """
+        Set up a column: width in pixels, anchor ("w" left, "center", "e" right),
+        type (int / float: only numbers can be typed when editing),
+        editable (True / False), check (a function given the typed text that
+        returns True if it is allowed), max_width (widest it grows to fit its
+        contents when no width is set: pixels, or "fit" for no limit).
+        """
+        s = self.settings[column]
+        for key, value in (("width", width), ("anchor", anchor), ("type", type),
+                           ("editable", editable), ("check", check),
+                           ("max_width", max_width)):
+            if value is not None:
+                s[key] = value
+        self._refresh()
+
+    # ---- rows ----
+    def insert(self, values, parent=None, index="end", open=False):
+        """Add a row. Returns its id (use it with item / set / delete / parent=)."""
+        row_id = self._next_id
+        self._next_id += 1
+        self.items[row_id] = {"values": list(values), "parent": parent, "children": [],
+                              "open": open}
+        siblings = self.top_level if parent is None else self.items[parent]["children"]
+        if index == "end":
+            siblings.append(row_id)
+        else:
+            siblings.insert(index, row_id)
+        self._changes += 1
+        self._refresh()
+        return row_id
+
+    def delete(self, row_id):
+        """Remove a row (and any rows inside it)."""
+        if row_id not in self.items:
+            return
+        for child in list(self.items[row_id]["children"]):
+            self.delete(child)
+        parent = self.items[row_id]["parent"]
+        siblings = self.top_level if parent is None else self.items[parent]["children"]
+        siblings.remove(row_id)
+        del self.items[row_id]
+        if self.selected == row_id:
+            self.selected = None
+        self._changes += 1
+        self._refresh()
+
+    def clear(self):
+        self.items, self.top_level, self.selected, self.scroll = {}, [], None, 0
+        self._changes += 1
+
+    def load(self, rows):
+        """Replace everything with a list of rows, e.g. load(high_scores.scores)."""
+        self.clear()
+        for values in rows:
+            self.insert(values)
+
+    def item(self, row_id):
+        """The values of a row (a list)."""
+        return list(self.items[row_id]["values"])
+
+    def get(self, row_id, column):
+        values = self.items[row_id]["values"]
+        index = self.columns.index(column)
+        return values[index] if index < len(values) else ""
+
+    def set(self, row_id, column, value):
+        values = self.items[row_id]["values"]
+        index = self.columns.index(column)
+        while len(values) <= index:
+            values.append("")
+        values[index] = value
+        self._changes += 1
+
+    def get_children(self, parent=None):
+        return list(self.top_level if parent is None else self.items[parent]["children"])
+
+    def all_rows(self):
+        """Every row's values (top to bottom, ignoring open / closed)."""
+        out = []
+
+        def walk(ids):
+            for i in ids:
+                out.append(self.item(i))
+                walk(self.items[i]["children"])
+        walk(self.top_level)
+        return out
+
+    def selection(self):
+        return self.selected
+
+    def selection_set(self, row_id):
+        self.selected = row_id
+        parent = self.items[row_id]["parent"]
+        while parent is not None:                      # open folders so it shows
+            self.items[parent]["open"] = True
+            parent = self.items[parent]["parent"]
+        self.see(row_id)
+
+    def get_selected(self):
+        """Values of the selected row, or None."""
+        return None if self.selected is None else self.item(self.selected)
+
+    def open(self, row_id, is_open=True):
+        self.items[row_id]["open"] = is_open
+
+    def _visible_rows(self):
+        """(id, depth) for each row that can be seen (open folders only)."""
+        out = []
+
+        def walk(ids, depth):
+            for i in ids:
+                out.append((i, depth))
+                if self.items[i]["open"]:
+                    walk(self.items[i]["children"], depth + 1)
+        walk(self.top_level, 0)
+        return out
+
+    def see(self, row_id):
+        ids = [i for i, d in self._visible_rows()]
+        if row_id in ids:
+            n = ids.index(row_id)
+            if n < self.scroll:
+                self.scroll = n
+            elif n >= self.scroll + self.rows:
+                self.scroll = n - self.rows + 1
+
+    # ---- sorting ----
+    def sort_by(self, column, reverse=False):
+        """Sort rows by a column (numbers sort as numbers)."""
+        index = self.columns.index(column)
+
+        def key(i):
+            values = self.items[i]["values"]
+            value = values[index] if index < len(values) else ""
+            try:
+                return (0, float(value), "")
+            except (TypeError, ValueError):
+                return (1, 0, str(value).lower())
+        self.top_level.sort(key=key, reverse=reverse)
+        for row in self.items.values():
+            row["children"].sort(key=key, reverse=reverse)
+        self.sorted_by = (column, reverse)
+
+    # ---- editing ----
+    def start_edit(self, row_id, column):
+        if self.state == "disabled" or not self.settings[column]["editable"]:
+            return False
+        self.editing = {"row": row_id, "column": column, "text": str(self.get(row_id, column))}
+        self.edit_error = None
+        return True
+
+    def _finish_edit(self, save=True):
+        e = self.editing
+        if e is None:
+            return True
+        if save:
+            s = self.settings[e["column"]]
+            text = e["text"]
+            value = text
+            if s["type"] is not None:
+                try:
+                    value = s["type"](text)
+                except ValueError:
+                    self.edit_error = f"Must be a {s['type'].__name__}"
+                    return False
+            if s["check"] is not None and not s["check"](text):
+                self.edit_error = "Not allowed"
+                return False
+            old = self.get(e["row"], e["column"])
+            self.set(e["row"], e["column"], value)
+            self.last_edit = (e["row"], e["column"], old, value)
+            self.editing = None
+            if self.on_edit and old != value:
+                self.on_edit()
+            return True
+        self.editing = None
+        return True
+
+    def _next_editable(self, row_id, column):
+        """The editable cell after this one (Tab)."""
+        cols = [c for c in self.columns if self.settings[c]["editable"]]
+        rows = [i for i, d in self._visible_rows()]
+        n = cols.index(column) + 1
+        if n < len(cols):
+            return row_id, cols[n]
+        r = rows.index(row_id) + 1
+        return (rows[r], cols[0]) if r < len(rows) else (None, None)
+
+    def _edit_key(self, event):
+        e = self.editing
+        if self.edit_mode == "spreadsheet" and event.key in (
+                pg.K_RETURN, pg.K_KP_ENTER, pg.K_UP, pg.K_DOWN):
+            # Spreadsheet: save, then move (Enter goes down like Excel)
+            row, column = e["row"], e["column"]
+            if self._finish_edit(True):
+                self._move_cell(row, column, "up" if event.key == pg.K_UP else "down")
+            return True
+        if event.key in (pg.K_RETURN, pg.K_KP_ENTER):
+            self._finish_edit(True)
+        elif event.key == pg.K_ESCAPE:
+            self._finish_edit(False)
+        elif event.key == pg.K_TAB:
+            row, column = e["row"], e["column"]
+            if self._finish_edit(True):
+                row, column = self._next_editable(row, column)
+                if row is not None:
+                    self.selection_set(row)
+                    if self.edit_mode == "spreadsheet":
+                        self.cell = (row, column)    # pick it, typing replaces
+                    else:
+                        self.start_edit(row, column)
+        elif event.key == pg.K_BACKSPACE:
+            e["text"] = e["text"][:-1]
+        elif event.unicode and event.unicode.isprintable():
+            e["text"] += event.unicode
+        self.edit_error = None if event.key not in (pg.K_RETURN, pg.K_TAB, pg.K_KP_ENTER) \
+            else self.edit_error
+        return True
+
+    # ---- spreadsheet mode ----
+    def _editable_columns(self):
+        return [c for c in self.columns if self.settings[c]["editable"]]
+
+    def _pick_cell(self, row, column):
+        """Spreadsheet mode: make (row, column) the picked cell."""
+        self.cell = (row, column)
+        if self.selected != row:
+            self.selected = row
+            if self.command:
+                self.command()
+        self.see(row)
+
+    def _move_cell(self, row, column, direction):
+        """Move the picked cell up / down / left / right (stops at the edges)."""
+        rows = [i for i, d in self._visible_rows()]
+        cols = self._editable_columns()
+        if row not in rows or column not in cols:
+            return
+        r, c = rows.index(row), cols.index(column)
+        if direction == "up":
+            r = max(0, r - 1)
+        elif direction == "down":
+            r = min(len(rows) - 1, r + 1)
+        elif direction == "left":
+            c = max(0, c - 1)
+        elif direction == "right":
+            c = min(len(cols) - 1, c + 1)
+        self._pick_cell(rows[r], cols[c])
+
+    def _cell_key(self, event):
+        """Spreadsheet mode: a key pressed while a cell is picked (not editing)."""
+        row, column = self.cell
+        arrows = {pg.K_UP: "up", pg.K_DOWN: "down", pg.K_LEFT: "left", pg.K_RIGHT: "right"}
+        if event.key in arrows:
+            self._move_cell(row, column, arrows[event.key])
+        elif event.key == pg.K_TAB:
+            row, column = self._next_editable(row, column)
+            if row is not None:
+                self._pick_cell(row, column)
+        elif event.key in (pg.K_RETURN, pg.K_KP_ENTER, pg.K_F2):
+            self.start_edit(row, column)                 # keep the old text
+        elif event.key == pg.K_ESCAPE:
+            self.cell = None
+        elif event.key == pg.K_DELETE:
+            if self.start_edit(row, column):
+                self.editing["text"] = ""
+                if not self._finish_edit(True):          # e.g. an int column
+                    self._finish_edit(False)
+        elif event.unicode and event.unicode.isprintable():
+            if self.start_edit(row, column):
+                self.editing["text"] = event.unicode     # typing replaces the cell
+        else:
+            return False
+        return True
+
+    # ---- where things are ----
+    def _table_layout(self, offset=(0, 0)):
+        r = self.get_rect(offset)
+        widths = self._column_widths()
+        xs = [r.x + 2 + sum(widths[:i]) for i in range(len(widths))]
+        return r, widths, xs
+
+    def _table_scrollbar(self, r):
+        """(track, thumb) rects, or None when every row fits."""
+        rows = len(self._visible_rows())
+        if rows <= self.rows:
+            return None
+        row_h = self._row_height()
+        track = pg.Rect(r.right - self.BAR_SPACE + 2, r.y + 2 + row_h, 11, self.rows * row_h)
+        return _scrollbar_rects(track, self.rows, rows, self.scroll)
+
+    def _cell_at(self, pos, offset=(0, 0)):
+        """("heading", column) / (row_id, column) / None."""
+        r, widths, xs = self._table_layout(offset)
+        if not r.collidepoint(pos):
+            return None
+        column = None
+        for i, x in enumerate(xs):
+            if x <= pos[0] < x + widths[i]:
+                column = self.columns[i]
+        row_h = self._row_height()
+        n = (pos[1] - r.y - 2) // row_h
+        if n == 0:
+            return ("heading", column)
+        rows = self._visible_rows()
+        index = self.scroll + n - 1
+        if 0 <= index < len(rows):
+            return (rows[index][0], column)
+        return (None, column)
+
+    def _edge_at(self, pos, offset=(0, 0)):
+        """resizable_columns: the column whose right-hand edge (in the headings) is at pos."""
+        if not self.resizable_columns:
+            return None
+        r, widths, xs = self._table_layout(offset)
+        if not (r.y + 2 <= pos[1] < r.y + 2 + self._row_height()):
+            return None
+        for i, x in enumerate(xs):
+            if abs(pos[0] - (x + widths[i])) <= 4:      # 4 pixels either side of the line
+                return self.columns[i]
+        return None
+
+    def _resize_event(self, event, offset):
+        """resizable_columns: drag a column edge, or double-click it to fit. True if used."""
+        if self._resizing and event.type == pg.MOUSEMOTION:
+            name, start_x, start_width = self._resizing
+            self.settings[name]["width"] = max(20, start_width + event.pos[0] - start_x)
+            self._refresh()
+            return True
+        if self._resizing and event.type == pg.MOUSEBUTTONUP and event.button == 1:
+            self._resizing = None
+            return True
+        if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+            name = self._edge_at(event.pos, offset)
+            if name is None:
+                return False
+            now = pg.time.get_ticks()
+            last_time, last_name = self._edge_click
+            self._edge_click = (now, name)
+            if last_name == name and now - last_time < 400:    # double-click: fit it
+                self.autofit(name)
+                self._edge_click = (0, None)
+                return True
+            index = self.columns.index(name)
+            self._resizing = (name, event.pos[0], self._column_widths()[index])
+            return True
+        return False
+
+    def _drawn(self, screen, offset):
+        super()._drawn(screen, offset)
+        # resizable_columns: tell Cursor about the table, so it can show the
+        # resize arrow over a column edge (only when Cursor.update is used)
+        if self.resizable_columns and self.cursor is None:
+            Cursor._on_screen(self, offset, screen.get_clip())
+
+    def _cursor_at(self, pos, offset):
+        """The pointer to show at pos (Cursor asks this)."""
+        if self._resizing or self._edge_at(pos, offset):
+            return "resize_lr"
+        return self.cursor
+
+    # ---- keyboard focus ----
+    def focus_action(self, action):
+        rows = [i for i, d in self._visible_rows()]
+        if self.editing:
+            return False
+        if not rows:
+            return False
+        current = rows.index(self.selected) if self.selected in rows else -1
+        if action in ("down", "up"):
+            n = max(0, min(len(rows) - 1, current + (1 if action == "down" else -1)))
+            self.selection_set(rows[n])
+            if self.command:
+                self.command()
+            return True
+        if self.selected is None:
+            return False
+        if action == "right" and self.items[self.selected]["children"]:
+            self.open(self.selected, True)
+            return True
+        if action == "left" and self.items[self.selected]["children"]:
+            self.open(self.selected, False)
+            return True
+        if action == "activate":
+            first = next((c for c in self.columns if self.settings[c]["editable"]), None)
+            if first:
+                return self.start_edit(self.selected, first)
+            if self.items[self.selected]["children"]:
+                self.open(self.selected, not self.items[self.selected]["open"])
+                return True
+        return False
+
+    def handle_event(self, event, offset=(0, 0)):
+        if not self.active:
+            self._resizing = None
+            return False
+        if self.editing and event.type == pg.KEYDOWN:
+            return self._edit_key(event)
+        if self.resizable_columns and self._resize_event(event, offset):
+            return True
+        if self.cell and event.type == pg.KEYDOWN:
+            if self.cell[0] not in self.items:           # its row was deleted
+                self.cell = None
+            elif self._cell_key(event):
+                return True
+        r = self.get_rect(offset)
+        bar = self._table_scrollbar(r)
+        if bar and _scrollbar_event(self, event, *bar, self.rows, len(self._visible_rows())):
+            return True
+        if event.type == pg.MOUSEWHEEL and r.collidepoint(pg.mouse.get_pos()):
+            most = max(0, len(self._visible_rows()) - self.rows)
+            self.scroll = max(0, min(most, self.scroll - event.y))
+            return True
+        if not _clicked(event, r):
+            if event.type == pg.MOUSEBUTTONDOWN and self.editing:
+                self._finish_edit(True)               # clicking elsewhere saves
+            if event.type == pg.MOUSEBUTTONDOWN:
+                self.cell = None                      # and lets go of the cell
+            return False
+        hit = self._cell_at(event.pos, offset)
+        if hit is None:
+            return True
+        row, column = hit
+        if row == "heading":
+            if column and self.settings[column]["sortable"]:
+                reverse = self.sorted_by == (column, False)
+                self.sort_by(column, reverse)
+            return True
+        if self.editing:
+            self._finish_edit(True)
+        if row is None:
+            return True
+        # Tree arrow
+        depth = dict(self._visible_rows())[row]
+        _, widths, xs = self._table_layout(offset)
+        arrow_x = xs[0] + depth * 20
+        if self.tree and self.items[row]["children"] and arrow_x <= event.pos[0] < arrow_x + 20:
+            self.open(row, not self.items[row]["open"])
+            return True
+        # Spreadsheet mode: one click picks an editable cell
+        # (and a second click on it within 0.4 seconds - a double-click - edits it)
+        if self.edit_mode == "spreadsheet" and column and self.settings[column]["editable"]:
+            now = pg.time.get_ticks()
+            last_time, last_row, last_col = self._last_click
+            self._last_click = (now, row, column)
+            if self.cell == (row, column) and last_row == row and last_col == column \
+                    and now - last_time < 400:
+                self.start_edit(row, column)             # keep the old text
+            else:
+                self._pick_cell(row, column)
+            return True
+        # Double click = edit
+        now = pg.time.get_ticks()
+        last_time, last_row, last_col = self._last_click
+        self._last_click = (now, row, column)
+        if last_row == row and last_col == column and now - last_time < 400:
+            if not self.start_edit(row, column) and self.tree and self.items[row]["children"]:
+                self.open(row, not self.items[row]["open"])
+            return True
+        if self.selected != row:
+            self.selected = row
+            if self.command:
+                self.command()
+        return True
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()
+        r, widths, xs = self._table_layout(offset)
+        font = self._font()
+        row_h = self._row_height()
+        pg.draw.rect(screen, self.cget("bg"), r)
+        mouse = pg.mouse.get_pos()
+        hovered_tip = None           # (cell, full text) of a cut-off cell under the mouse
+
+        # Headings
+        heading_bg = self.cget("heading_bg") or self.cget("button_bg") or (190, 190, 200)
+        for i, name in enumerate(self.columns):
+            cell = pg.Rect(xs[i], r.y + 2, widths[i], row_h)
+            pg.draw.rect(screen, heading_bg, cell)
+            pg.draw.rect(screen, self.cget("border_color"), cell, 1)
+            words = str(self.settings[name]["heading"])
+            room = cell.width - 12
+            if self.sorted_by and self.sorted_by[0] == name:
+                room = cell.width - 24                           # leave room for the arrow
+            text = font.render(_fit_text(font, words, room), True, self._text_colour())
+            screen.blit(text, (cell.x + 6, cell.centery - text.get_height() // 2))
+            if i == len(self.columns) - 1:
+                # an empty heading above the scroll bar, so the row is full width
+                corner = pg.Rect(cell.right, cell.y, r.right - 2 - cell.right, row_h)
+                pg.draw.rect(screen, heading_bg, corner)
+                pg.draw.rect(screen, self.cget("border_color"), corner, 1)
+            if self.sorted_by and self.sorted_by[0] == name:      # sort arrow
+                ax, ay = cell.x + 14 + text.get_width(), cell.centery
+                if self.sorted_by[1]:
+                    points = [(ax - 5, ay - 3), (ax + 5, ay - 3), (ax, ay + 4)]
+                else:
+                    points = [(ax - 5, ay + 3), (ax + 5, ay + 3), (ax, ay - 4)]
+                pg.draw.polygon(screen, self._text_colour(), points)
+
+        # Rows
+        rows = self._visible_rows()
+        for n in range(self.rows):
+            index = self.scroll + n
+            if index >= len(rows):
+                break
+            row_id, depth = rows[index]
+            y = r.y + 2 + (n + 1) * row_h
+            line = pg.Rect(r.x + 2, y, sum(widths), row_h)
+            colour = self._text_colour()
+            if row_id == self.selected:
+                pg.draw.rect(screen, self.cget("select_bg"), line)
+                colour = self.cget("select_fg")
+            elif line.collidepoint(mouse):
+                shade = pg.Surface(line.size, pg.SRCALPHA)
+                shade.fill((255, 255, 255, 40))
+                screen.blit(shade, line)
+            elif self.striped and index % 2:
+                shade = pg.Surface(line.size, pg.SRCALPHA)
+                shade.fill((0, 0, 0, 25))
+                screen.blit(shade, line)
+            values = self.items[row_id]["values"]
+            for i, name in enumerate(self.columns):
+                cell = pg.Rect(xs[i], y, widths[i], row_h)
+                left = cell.x + 6
+                if i == 0 and self.tree:
+                    left += depth * 20
+                    if self.items[row_id]["children"]:
+                        cx, cy = left + 5, cell.centery
+                        if self.items[row_id]["open"]:
+                            points = [(cx - 5, cy - 3), (cx + 5, cy - 3), (cx, cy + 4)]
+                        else:
+                            points = [(cx - 3, cy - 5), (cx - 3, cy + 5), (cx + 4, cy)]
+                        pg.draw.polygon(screen, colour, points)
+                    left += 16
+                if self.cell == (row_id, name) and not self.editing:
+                    pg.draw.rect(screen, self.cget("focus_color"), cell, 2)
+                editing_here = self.editing and self.editing["row"] == row_id and \
+                    self.editing["column"] == name
+                if editing_here:
+                    box = cell.inflate(-4, -4)
+                    pg.draw.rect(screen, WHITE, box)
+                    pg.draw.rect(screen, (230, 60, 60) if self.edit_error else
+                                 self.cget("focus_color"), box, 2)
+                    typed = font.render(self.editing["text"], True, BLACK)
+                    screen.blit(typed, (box.x + 4, box.centery - typed.get_height() // 2))
+                    caret_x = box.x + 5 + typed.get_width()
+                    pg.draw.line(screen, BLACK, (caret_x, box.y + 3), (caret_x, box.bottom - 3))
+                    continue
+                value = values[i] if i < len(values) else ""
+                words = _fit_text(font, value, cell.right - 6 - left)
+                if words != str(value) and self.cell_tooltips and cell.collidepoint(mouse):
+                    hovered_tip = (cell, str(value))
+                text = font.render(words, True, colour)
+                anchor = self.settings[name]["anchor"]
+                if anchor == "e":
+                    tx = cell.right - 6 - text.get_width()
+                elif anchor == "center":
+                    tx = cell.centerx - text.get_width() // 2
+                else:
+                    tx = left
+                old_clip = screen.get_clip()
+                screen.set_clip(cell.clip(old_clip) if old_clip else cell)
+                screen.blit(text, (tx, cell.centery - text.get_height() // 2))
+                screen.set_clip(old_clip)
+
+        # Scroll bar (drag it, or click above / below the handle)
+        bar = self._table_scrollbar(r)
+        if bar:
+            track, thumb = bar
+            pg.draw.rect(screen, self.cget("trough_color"), track)
+            pg.draw.rect(screen, self.cget("accent"), thumb, border_radius=4)
+        pg.draw.rect(screen, self.cget("border_color"), r, 2)
+        if self.edit_error:
+            screen.blit(get_font(None, 18).render(self.edit_error, True, (255, 90, 90)),
+                        (r.x, r.bottom + 2))
+        self._draw_focus(screen, r)
+
+        # cell_tooltips: remember when the mouse arrived on a cut-off cell
+        if hovered_tip is None or self._resizing:
+            self._tip = None
+        elif self._tip is None or self._tip[0] != hovered_tip[0]:
+            self._tip = (hovered_tip[0], hovered_tip[1], pg.time.get_ticks())
+        self.draw_overlay(screen, offset)
+
+    TIP_DELAY = 500     # ms the mouse rests on a cut-off cell before its tooltip shows
+
+    def draw_overlay(self, screen, offset=(0, 0)):
+        """Draw the tooltip of a cut-off cell (Frames call this last so it is on top)."""
+        if not (self.visible and self._tip):
+            return
+        cell, words, since = self._tip
+        if pg.time.get_ticks() - since < self.TIP_DELAY:
+            return
+        font = self._font()
+        text = font.render(words, True, WHITE)
+        box = pg.Rect(0, 0, min(text.get_width() + 12, screen.get_width()),
+                      text.get_height() + 8)
+        box.topleft = (cell.x, cell.bottom + 2)
+        if box.bottom > screen.get_height():           # no room below: show it above
+            box.bottom = cell.y - 2
+        box.right = min(box.right, screen.get_width())  # keep it in the window
+        box.x = max(0, box.x)
+        pg.draw.rect(screen, (20, 20, 30), box)
+        pg.draw.rect(screen, (200, 200, 200), box, 1)
+        old_clip = screen.get_clip()
+        screen.set_clip(box)
+        screen.blit(text, (box.x + 6, box.y + 4))
+        screen.set_clip(old_clip)
+
+
+# ================================
+# Menu Class (like tkinter's Menu)
+# ================================
+
+class Menu:
+    """
+    Menus like tkinter: a menu bar across the top, drop-down menus,
+    sub-menus, tick / choice items, and right-click (context) menus.
+
+    Menu bar (with Root):
+        menubar = Menu(root)
+        file_menu = Menu(menubar)
+        file_menu.add_command(label="New game", command=new_game, accelerator="Ctrl+N")
+        file_menu.add_separator()
+        file_menu.add_command(label="Quit", command=quit_game, accelerator="Ctrl+Q")
+        menubar.add_cascade(label="File", menu=file_menu)
+        root.config(menu=menubar)          # shows it across the top of the window
+
+    Right-click menu:
+        context = Menu()
+        context.add_command(label="Delete", command=delete_item)
+        context.post(*mouse.pos)           # open it at the mouse
+        context.handle_event(event)        # first in handle_inputs()
+        context.draw(screen)               # last in draw_game()
+
+    Shortcuts written in accelerator= (e.g. "Ctrl+N", "Ctrl+Shift+S", "F5")
+    really work - set accelerators=False on the top menu to turn that off.
+    Other items: add_checkbutton(label=, variable=), add_radiobutton(label=,
+    variable=, value=), entryconfig(index, state="disabled"), invoke(index).
+    """
+
+    _all_open = []          # top menus with something open (only one at a time)
+
+    def __init__(self, master=None, bar=False, accelerators=True, width=None, fg=None,
+                 bg=None, select_fg=None, select_bg=None, font_name=None, font_size=None,
+                 style=None, tearoff=0, font_style=None):
+        self.master = master
+        self.entries = []
+        self.is_bar = bar
+        self.accelerators = accelerators
+        self.bar_width = width
+        self.fg, self.bg = fg, bg
+        self.select_fg, self.select_bg = select_fg, select_bg
+        self.font_name, self.font_size = font_name, font_size
+        self.font_style = font_style
+        self.style = style
+        self.visible = True
+        self._chain = []            # open menus: [{"menu", "rect", "hover"}]
+        self._bar_open = None       # index of the open bar item
+
+    # ---- options (Style works like other widgets) ----
+    def cget(self, option):
+        value = getattr(self, option, None)
+        if value is not None:
+            return value
+        names = ([Style._name(self.style)] if self.style else []) + ["Menu"]
+        return Style.lookup(names, option)
+
+    def _font(self):
+        return get_font(self.cget("font_name"), self.cget("font_size"),
+                        self.cget("font_style"))
+
+    # ---- adding entries ----
+    def _add(self, kind, **options):
+        options.setdefault("state", "normal")
+        options["kind"] = kind
+        self.entries.append(options)
+
+    def add_command(self, label="", command=None, accelerator=None, state="normal", **_):
+        self._add("command", label=label, command=command, accelerator=accelerator, state=state)
+
+    def add_checkbutton(self, label="", variable=None, onvalue=True, offvalue=False,
+                        command=None, accelerator=None, state="normal", **_):
+        self._add("check", label=label, variable=variable if variable is not None
+                  else BooleanVar(False), onvalue=onvalue, offvalue=offvalue,
+                  command=command, accelerator=accelerator, state=state)
+
+    def add_radiobutton(self, label="", variable=None, value=None, command=None,
+                        accelerator=None, state="normal", **_):
+        self._add("radio", label=label, variable=variable, value=value, command=command,
+                  accelerator=accelerator, state=state)
+
+    def add_cascade(self, label="", menu=None, state="normal", **_):
+        self._add("cascade", label=label, menu=menu, state=state)
+
+    def add_separator(self):
+        self._add("separator", label="")
+
+    def index(self, label):
+        for i, entry in enumerate(self.entries):
+            if entry.get("label") == label:
+                return i
+        raise ValueError(f"No menu item called '{label}'")
+
+    def _entry(self, index):
+        return self.entries[self.index(index) if isinstance(index, str) else index]
+
+    def entryconfig(self, index, **options):
+        """Change an item, e.g. entryconfig("Save", state="disabled")."""
+        self._entry(index).update(options)
+
+    entryconfigure = entryconfig
+
+    def delete(self, index):
+        self.entries.remove(self._entry(index))
+
+    def invoke(self, index):
+        """Do what clicking the item would do."""
+        entry = self._entry(index)
+        if entry["state"] == "disabled":
+            return
+        if entry["kind"] == "check":
+            v = entry["variable"]
+            v.set(entry["offvalue"] if v.get() == entry["onvalue"] else entry["onvalue"])
+        elif entry["kind"] == "radio" and entry["variable"] is not None:
+            entry["variable"].set(entry["value"])
+        if entry.get("command"):
+            entry["command"]()
+
+    # ---- opening and closing ----
+    def post(self, x, y):
+        """Open this menu at (x, y) on screen - for right-click menus."""
+        self.close_all()
+        rect = self._popup_rect((x, y))
+        self._chain = [{"menu": self, "rect": rect, "hover": None}]
+        Menu._all_open.append(self)
+
+    def unpost(self):
+        self.close()
+
+    def close(self):
+        self._chain = []
+        self._bar_open = None
+        if self in Menu._all_open:
+            Menu._all_open.remove(self)
+
+    @classmethod
+    def close_all(cls):
+        for menu in list(cls._all_open):
+            menu.close()
+
+    @property
+    def is_open(self):
+        return bool(self._chain)
+
+    # ---- sizes ----
+    def _item_height(self, entry):
+        return 9 if entry["kind"] == "separator" else self._font().get_height() + 10
+
+    def _popup_size(self):
+        font = self._font()
+        width = 120
+        for e in self.entries:
+            w = font.size(e.get("label", ""))[0] + 50
+            if e.get("accelerator"):
+                w += font.size(e["accelerator"])[0] + 30
+            width = max(width, w + (16 if e["kind"] == "cascade" else 0))
+        return width, sum(self._item_height(e) for e in self.entries) + 6
+
+    def _popup_rect(self, pos):
+        w, h = self._popup_size()
+        r = pg.Rect(pos[0], pos[1], w, h)
+        surface = pg.display.get_surface()
+        if surface is not None:                    # keep it on screen
+            sw, sh = surface.get_size()
+            if r.right > sw:
+                r.right = sw
+            if r.bottom > sh:
+                r.bottom = sh
+        return r
+
+    def _item_rects(self, rect):
+        out, y = [], rect.y + 3
+        for e in self.entries:
+            h = self._item_height(e)
+            out.append(pg.Rect(rect.x + 3, y, rect.width - 6, h))
+            y += h
+        return out
+
+    def bar_height(self):
+        return self._font().get_height() + 12
+
+    def _bar_rect(self):
+        surface = pg.display.get_surface()
+        width = self.bar_width or (surface.get_width() if surface else 800)
+        return pg.Rect(0, 0, width, self.bar_height())
+
+    def _bar_items(self):
+        font = self._font()
+        x, out = 4, []
+        for e in self.entries:
+            w = font.size(e.get("label", ""))[0] + 24
+            out.append(pg.Rect(x, 0, w, self.bar_height()))
+            x += w
+        return out
+
+    # ---- shortcuts ----
+    @staticmethod
+    def _parse_accelerator(text):
+        parts = [p.strip().lower() for p in text.replace("-", "+").split("+")]
+        names = {"ctrl": pg.KMOD_CTRL, "control": pg.KMOD_CTRL, "shift": pg.KMOD_SHIFT,
+                 "alt": pg.KMOD_ALT, "cmd": pg.KMOD_META}
+        mods = [names[p] for p in parts[:-1] if p in names]
+        key_name = {"esc": "escape", "del": "delete", "enter": "return", "ins": "insert",
+                    "pgup": "page up", "pgdn": "page down"}.get(parts[-1], parts[-1])
+        try:
+            return mods, pg.key.key_code(key_name)
+        except ValueError:
+            return mods, None
+
+    def _all_entries(self):
+        for e in self.entries:
+            yield e
+            if e["kind"] == "cascade" and e.get("menu") is not None:
+                yield from e["menu"]._all_entries()
+
+    def _try_accelerators(self, event):
+        held = event.mod
+        for e in self._all_entries():
+            if not e.get("accelerator") or e["state"] == "disabled":
+                continue
+            mods, key = self._parse_accelerator(e["accelerator"])
+            if key != event.key:
+                continue
+            wanted_all = all(held & m for m in mods)
+            extra = [m for m in (pg.KMOD_CTRL, pg.KMOD_SHIFT, pg.KMOD_ALT)
+                     if held & m and m not in mods]
+            if wanted_all and not extra:
+                owner = self._owner_of(e)
+                owner.invoke(owner.entries.index(e))
+                self.close()
+                return True
+        return False
+
+    def _owner_of(self, entry):
+        if entry in self.entries:
+            return self
+        for e in self.entries:
+            if e["kind"] == "cascade" and e.get("menu") is not None:
+                found = e["menu"]._owner_of(entry)
+                if found:
+                    return found
+        return None
+
+    # ---- mouse and keys ----
+    def _open_submenu(self, level, index):
+        """Open the cascade at `index` of the menu at chain[level]."""
+        del self._chain[level + 1:]
+        info = self._chain[level]
+        entry = info["menu"].entries[index]
+        if entry["kind"] != "cascade" or entry.get("menu") is None or entry["state"] == "disabled":
+            return
+        item = info["menu"]._item_rects(info["rect"])[index]
+        rect = entry["menu"]._popup_rect((item.right + 2, item.y - 3))
+        self._chain.append({"menu": entry["menu"], "rect": rect, "hover": None})
+
+    def _open_bar_item(self, index):
+        entry = self.entries[index]
+        Menu.close_all()                 # only one menu open at a time
+        self._bar_open = index
+        if entry["kind"] == "cascade" and entry.get("menu") is not None:
+            item = self._bar_items()[index]
+            rect = entry["menu"]._popup_rect((item.x, item.bottom))
+            self._chain = [{"menu": entry["menu"], "rect": rect, "hover": None}]
+            Menu._all_open.append(self)
+        elif entry["kind"] == "command":
+            self.invoke(index)
+            self._bar_open = None
+
+    def _activate(self, level, index):
+        menu = self._chain[level]["menu"]
+        entry = menu.entries[index]
+        if entry["state"] == "disabled" or entry["kind"] == "separator":
+            return
+        if entry["kind"] == "cascade":
+            self._open_submenu(level, index)
+            return
+        self.close()
+        menu.invoke(index)
+
+    def handle_event(self, event):
+        """Returns True if the menu used the event (so the game shouldn't)."""
+        if not self.visible:
+            return False
+        if event.type == pg.KEYDOWN and self.accelerators and not self._chain:
+            if self._try_accelerators(event):
+                return True
+        mouse = getattr(event, "pos", None)
+
+        if self._chain:
+            if event.type == pg.KEYDOWN:
+                info = self._chain[-1]
+                items = [i for i, e in enumerate(info["menu"].entries) if e["kind"] != "separator"]
+                if event.key == pg.K_ESCAPE:
+                    self.close()
+                elif event.key in (pg.K_DOWN, pg.K_UP) and items:
+                    now = info["hover"] if info["hover"] in items else -1
+                    step = 1 if event.key == pg.K_DOWN else -1
+                    pos = (items.index(now) + step) % len(items) if now in items else 0
+                    info["hover"] = items[pos]
+                elif event.key == pg.K_RIGHT and info["hover"] is not None:
+                    self._open_submenu(len(self._chain) - 1, info["hover"])
+                elif event.key == pg.K_LEFT and len(self._chain) > 1:
+                    self._chain.pop()
+                elif event.key in (pg.K_RETURN, pg.K_SPACE) and info["hover"] is not None:
+                    self._activate(len(self._chain) - 1, info["hover"])
+                elif self.accelerators:
+                    self._try_accelerators(event)
+                return True
+            if mouse is not None:
+                # Inside one of the open menus?
+                for level in range(len(self._chain) - 1, -1, -1):
+                    info = self._chain[level]
+                    if info["rect"].collidepoint(mouse):
+                        index = None
+                        for i, r in enumerate(info["menu"]._item_rects(info["rect"])):
+                            if r.collidepoint(mouse):
+                                index = i
+                        if event.type == pg.MOUSEMOTION:
+                            if index != info["hover"]:
+                                info["hover"] = index
+                                del self._chain[level + 1:]
+                                if index is not None:
+                                    self._open_submenu(level, index)
+                        elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1 \
+                                and index is not None:
+                            self._activate(level, index)
+                        return True
+                if self.is_bar:
+                    for i, r in enumerate(self._bar_items()):
+                        if r.collidepoint(mouse):
+                            if event.type == pg.MOUSEMOTION and i != self._bar_open:
+                                self._open_bar_item(i)
+                            elif event.type == pg.MOUSEBUTTONDOWN:
+                                self.close()
+                            return True
+                if event.type == pg.MOUSEBUTTONDOWN:
+                    self.close()                        # clicked somewhere else
+                    return True
+                return event.type in (pg.MOUSEBUTTONUP, pg.MOUSEWHEEL)
+            return False
+
+        if self.is_bar and mouse is not None and self._bar_rect().collidepoint(mouse):
+            if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                for i, r in enumerate(self._bar_items()):
+                    if r.collidepoint(mouse):
+                        self._open_bar_item(i)
+            return event.type != pg.MOUSEMOTION
+        return False
+
+    def update(self, tick=0):
+        pass
+
+    # ---- drawing ----
+    def _draw_popup(self, screen, info):
+        menu, rect = info["menu"], info["rect"]
+        font = menu._font()
+        shadow = pg.Surface(rect.size, pg.SRCALPHA)
+        shadow.fill((0, 0, 0, 70))
+        screen.blit(shadow, rect.move(4, 4))
+        pg.draw.rect(screen, menu.cget("bg"), rect)
+        pg.draw.rect(screen, menu.cget("border_color"), rect, 1)
+        for i, (entry, r) in enumerate(zip(menu.entries, menu._item_rects(rect))):
+            if entry["kind"] == "separator":
+                pg.draw.line(screen, menu.cget("border_color"), (r.x + 4, r.centery),
+                             (r.right - 4, r.centery))
+                continue
+            disabled = entry["state"] == "disabled"
+            colour = menu.cget("disabled_fg") if disabled else menu.cget("fg")
+            if i == info["hover"] and not disabled:
+                pg.draw.rect(screen, menu.cget("select_bg"), r)
+                colour = menu.cget("select_fg")
+            # Tick or dot
+            if entry["kind"] == "check" and entry["variable"].get() == entry["onvalue"]:
+                cx, cy = r.x + 12, r.centery
+                pg.draw.lines(screen, colour, False, [(cx - 5, cy), (cx - 1, cy + 4), (cx + 6, cy - 5)], 2)
+            if entry["kind"] == "radio" and entry["variable"] is not None and \
+                    entry["variable"].get() == entry["value"]:
+                pg.draw.circle(screen, colour, (r.x + 12, r.centery), 4)
+            text = font.render(entry["label"], True, colour)
+            screen.blit(text, (r.x + 26, r.centery - text.get_height() // 2))
+            if entry.get("accelerator"):
+                acc = font.render(entry["accelerator"], True, colour)
+                screen.blit(acc, (r.right - acc.get_width() - 10, r.centery - acc.get_height() // 2))
+            if entry["kind"] == "cascade":
+                ax, ay = r.right - 10, r.centery
+                pg.draw.polygon(screen, colour, [(ax - 4, ay - 5), (ax - 4, ay + 5), (ax + 2, ay)])
+
+    def draw(self, screen):
+        """Draw the bar (if this is a menu bar) and any open menus - draw it LAST."""
+        if not self.visible:
+            return
+        if self.is_bar:
+            bar = self._bar_rect()
+            font = self._font()
+            pg.draw.rect(screen, self.cget("bg"), bar)
+            pg.draw.line(screen, self.cget("border_color"), bar.bottomleft, bar.bottomright)
+            mouse = pg.mouse.get_pos()
+            for i, (entry, r) in enumerate(zip(self.entries, self._bar_items())):
+                colour = self.cget("fg")
+                if i == self._bar_open or (r.collidepoint(mouse) and not self._chain):
+                    pg.draw.rect(screen, self.cget("select_bg"), r)
+                    colour = self.cget("select_fg")
+                if entry["state"] == "disabled":
+                    colour = self.cget("disabled_fg")
+                text = font.render(entry.get("label", ""), True, colour)
+                screen.blit(text, text.get_rect(center=r.center))
+        for info in self._chain:
+            self._draw_popup(screen, info)
+
+
+# ================================
+# LabelFrame Class
+# ================================
+
+class LabelFrame(Frame):
+    """
+    A Frame with a title on its border (like tkinter's LabelFrame).
+    Good for grouping options, e.g. "Sound" or "Difficulty".
+
+    Parameters: the same as Frame, plus
+        text - the title
+        fg   - title colour
+        font_name, font_size, font_style
+
+    Example:
+        group = LabelFrame(50, 50, 250, 150, "Difficulty")
+        group.add(Radiobutton(0, 0, "Easy", variable=level, value="Easy"))
+    """
+
+    def __init__(self, x, y=0, width=None, height=None, text="", fg=None, font_name=None,
+                 font_size=None, font_style=None, **options):
+        super().__init__(x, y, width, height, **options)
+        self.text = text
+        self.fg = fg
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+
+    def _arrange(self):
+        self.top_space = self._font().get_height() // 2 + 8   # room for the title
+        super()._arrange()
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        if self._fade_layer(screen, offset):     # fading in / out
+            return
+        self._drawn(screen, offset)
+        self._arrange()
+        r = self.get_rect(offset)
+        font = self._font()
+        title = font.render(str(self.text), True, self.cget("fg"))
+        box = pg.Rect(r.x, r.y + title.get_height() // 2, r.width,
+                      r.height - title.get_height() // 2)
+        if self.cget("bg") is not None:
+            pg.draw.rect(screen, self.cget("bg"), box)
+        border = self.cget("border_width") or 0
+        colour = self.cget("border_color")
+        gap_left, gap_right = box.x + 10, box.x + 18 + title.get_width()
+        if border and colour:
+            # Draw the border in pieces, leaving a gap in the top line for the title
+            pg.draw.line(screen, colour, box.topleft, (gap_left, box.top), border)
+            if self.text:
+                pg.draw.line(screen, colour, (gap_right, box.top), box.topright, border)
+            else:
+                pg.draw.line(screen, colour, box.topleft, box.topright, border)
+            pg.draw.line(screen, colour, box.topleft, box.bottomleft, border)
+            pg.draw.line(screen, colour, box.topright, box.bottomright, border)
+            pg.draw.line(screen, colour, box.bottomleft, box.bottomright, border)
+        if self.text:
+            screen.blit(title, (gap_left + 4, r.y))
+        self.draw_children(screen, offset)
+
+
+# ================================
+# Notebook Class
+# ================================
+
+class Notebook(Container):
+    """
+    Tabs, each showing a different page (like ttk.Notebook).
+
+    Parameters:
+        x, y, width, height - position and size (including the tabs)
+        tab_height    - height of the tabs
+        command       - function to run when the tab changes
+        fg, bg, tab_bg, select_bg, border_color, border_width, font_name, font_size, font_style
+
+    Example:
+        settings = Notebook(100, 50, 400, 300)
+        sound = settings.new_tab("Sound")          # returns a Frame for that tab
+        sound.add(Checkbutton(0, 0, "Music", variable=music_on))
+        controls = settings.new_tab("Controls")
+    """
+
+    takes_focus = True
+
+    def __init__(self, x, y=0, width=400, height=300, tab_height=36, command=None,
+                 fg=None, bg=None, tab_bg=None, select_bg=None,
+                 border_color=None, border_colour=None, border_width=None,
+                 font_name=None, font_size=None, center=False, visible=True, style=None,
+                 cursor=None, font_style=None):
+        super().__init__(x, y, width, height, bg, _pick(border_color, border_colour),
+                         border_width, 0, 0, center, visible, style)
+        self.cursor = cursor
+        self.tab_height = tab_height
+        self.command = command
+        self.fg = fg
+        self.tab_bg = tab_bg
+        self.select_bg = select_bg
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.tabs = []              # list of (text, page)
+        self.selected = 0
+        self.top_space = tab_height
+
+    # ---- tkinter-style methods ----
+    def add(self, page, text="Tab"):
+        """Add a page (usually a Frame) as a new tab."""
+        self.tabs.append((text, page))
+        page.parent = self
+        return page
+
+    def _child_showing(self, child):
+        return self.showing and bool(self.tabs) and self.tabs[self.selected][1] is child
+
+    def new_tab(self, text, **frame_options):
+        """Make a new tab with an empty Frame that fills it, and return the Frame."""
+        frame_options.setdefault("border_width", 0)
+        frame_options.setdefault("bg", None)
+        page = Frame(0, 0, self.width, self.height - self.tab_height, **frame_options)
+        return self.add(page, text)
+
+    def select(self, index=None):
+        """select() returns the current tab number; select(1) shows tab 1."""
+        if index is None:
+            return self.selected
+        if 0 <= index < len(self.tabs) and index != self.selected:
+            self.selected = index
+            if self.command:
+                self.command()
+
+    def tab_text(self, index=None):
+        return self.tabs[self.selected if index is None else index][0]
+
+    def _visible_children(self):
+        return [self.tabs[self.selected][1]] if self.tabs else []
+
+    def _tab_rects(self, r):
+        if not self.tabs:
+            return []
+        width = r.width // len(self.tabs)
+        return [pg.Rect(r.x + i * width, r.y, width, self.tab_height)
+                for i in range(len(self.tabs))]
+
+    def focus_action(self, action):
+        if action == "right":
+            self.select((self.selected + 1) % len(self.tabs))
+            return True
+        if action == "left":
+            self.select((self.selected - 1) % len(self.tabs))
+            return True
+        return False
+
+    def handle_event(self, event, offset=(0, 0)):
+        if not self.visible:
+            return False
+        if self.closing:                     # fading out: no more clicks
+            return False
+        if not self.has_open_popup():
+            for i, tab in enumerate(self._tab_rects(self.get_rect(offset))):
+                if _clicked(event, tab):
+                    self.select(i)
+                    return True
+        return super().handle_event(event, offset)
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        if self._fade_layer(screen, offset):     # fading in / out
+            return
+        self._drawn(screen, offset)
+        self._arrange()
+        r = self.get_rect(offset)
+        page = pg.Rect(r.x, r.y + self.tab_height, r.width, r.height - self.tab_height)
+        self._draw_box(screen, page)
+        font = self._font()
+        for i, tab in enumerate(self._tab_rects(r)):
+            colour = self.cget("bg") if i == self.selected else self.cget("tab_bg")
+            pg.draw.rect(screen, colour, tab, border_top_left_radius=8,
+                         border_top_right_radius=8)
+            if self.cget("border_color"):
+                pg.draw.rect(screen, self.cget("border_color"), tab, 1,
+                             border_top_left_radius=8, border_top_right_radius=8)
+            words = font.render(str(self.tabs[i][0]), True, self.cget("fg"))
+            screen.blit(words, words.get_rect(center=tab.center))
+        if self.focused and self.tabs:
+            self._draw_focus(screen, self._tab_rects(r)[self.selected])
+        self.draw_children(screen, offset)
+
+
+# ================================
+# Popup Class
+# ================================
+
+class Popup(Container):
+    """
+    A pop-up window with a title bar and a close (X) button.
+    It starts hidden: call show() to open it. Widgets added to it appear
+    below the title bar. Draw it last so it is on top of everything.
+
+    Parameters:
+        x, y, width, height - position and size
+        title         - words in the title bar
+        fg            - title colour
+        title_font_size, title_font_name - the title's text (default 24)
+        title_font_style - e.g. "bold" for a bold title (default: plain)
+        bg            - window colour
+        border_color  - border colour (border_colour also works)
+        border_width  - border thickness
+        dim           - if True, darken the rest of the screen when open
+        pad_x, pad_y  - space between the edge and the children
+        center        - if True, (x, y) is the centre of the popup
+        visible       - True to start open
+
+    Example:
+        message = Popup(200, 150, 300, 200, "Game Over")
+        message.add(Label(0, 0, "You win!", fg=(0, 0, 0)))
+        message.show()
+    """
+
+    TITLE_HEIGHT = 40
+
+    def __init__(self, x, y=0, width=300, height=200, title="Popup", fg=None, bg=None,
+                 border_color=None, border_colour=None, border_width=None,
+                 dim=True, pad_x=10, pad_y=0, center=False, visible=False, style=None,
+                 title_font_size=None, title_font_name=None, cursor=None,
+                 title_font_style=None):
+        super().__init__(x, y, width, height, bg, _pick(border_color, border_colour),
+                         border_width, pad_x, pad_y, center, visible, style)
+        self.cursor = cursor
+        self.title = title
+        self.fg = fg
+        self.dim = dim
+        self.title_font_size = title_font_size
+        self.title_font_name = title_font_name
+        self.title_font_style = title_font_style
+        self.top_space = self.TITLE_HEIGHT
+        self.close_button = Button(width - 30, 10, 20, 20, "X", command=self.hide,
+                                   fg=WHITE, bg=(200, 60, 60), hover_bg=(255, 80, 80),
+                                   font_size=22)
+
+    def handle_event(self, event, offset=(0, 0)):
+        if not self.visible:
+            return False
+        if self.closing:                     # fading out: no more clicks
+            return False
+        if self.close_button.handle_event(event, self.get_rect(offset).topleft):
+            return True
+        return super().handle_event(event, offset)
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        if self._fade_layer(screen, offset):     # fading in / out
+            return
+        self._drawn(screen, offset)
+        self.top_space = self._title_space()
+        self._arrange()
+
+        # Darken everything behind the popup
+        if self.dim:
+            overlay = pg.Surface(screen.get_size(), pg.SRCALPHA)
+            overlay.fill((0, 0, 0, 120))
+            screen.blit(overlay, (0, 0))
+
+        r = self.get_rect(offset)
+        self._draw_box(screen, r, radius=10)
+        draw_text(screen, self.title, r.x + 10, r.y + 10, fg=self.cget("fg"),
+                  font_size=self.cget("title_font_size"),
+                  font_name=self.cget("title_font_name"),
+                  font_style=self.cget("title_font_style"))
+        self.draw_children(screen, offset)
+        self.close_button.draw(screen, r.topleft)
+
+    def _title_space(self):
+        """Height of the title bar: 40 pixels, or more for a big title font."""
+        font = get_font(self.cget("title_font_name"), self.cget("title_font_size"),
+                        self.cget("title_font_style"))
+        return max(self.TITLE_HEIGHT, font.get_height() + 20)
+
+
+# ================================
+# MessageBox (like tkinter's messagebox)
+# ================================
+
+def _call_with_answer(function, answer):
+    """Run a command: give it the answer if it takes one, otherwise call it with ()."""
+    import inspect
+    try:
+        wants_answer = len(inspect.signature(function).parameters) > 0
+    except (TypeError, ValueError):
+        wants_answer = True
+    if wants_answer:
+        function(answer)
+    else:
+        function()
+
+
+class MessageBox(Popup):
+    """
+    A ready-made question box: a message and a row of buttons
+    (like tkinter's messagebox).
+
+    tkinter's messagebox.askyesno() STOPS your program until the player
+    answers. A game can't stop (the screen would freeze), so here the answer
+    is given to your command function instead:
+
+        def quit_answer(answer):          # answer is "Yes", "No" or "Cancel"
+            if answer == "Yes":
+                pg.quit()
+                sys.exit()
+
+        quit_box = MessageBox("Quit?", "Do you really want to quit?",
+                              buttons=("Yes", "No", "Cancel"), command=quit_answer)
+        quit_box.show()                   # open it (e.g. when Escape is pressed)
+        quit_box.handle_event(event)      # FIRST in handle_inputs()
+        quit_box.draw(screen)             # LAST in draw_game()
+
+    The answer is the text of the button clicked, or None if the box was
+    closed with X or Escape. Enter presses the first button. A command with
+    no answer (def quit_answer():) also works - read quit_box.result.
+    While it is open it takes every click and key, so the game underneath
+    doesn't react.
+
+    type_speed=30 types the message out one letter at a time (see Message).
+    Then also call quit_box.update(tick) in update(tick). While it is typing,
+    the first click / Enter / Space only shows the rest of the message, so a
+    player can't answer before they have read the question.
+
+    Shortcuts that answer like tkinter (True / False / None):
+        askyesno(title, message, command)        True / False
+        askyesnocancel(title, message, command)  True / False / None
+        askokcancel(title, message, command)     True / False
+        showinfo(title, message, command=None)   "ok"
+    They open the box straight away and return it - keep it, then
+    handle_event and draw it like above.
+
+    Parameters:
+        title    - words in the title bar
+        message  - the question (it wraps onto new lines)
+        buttons  - the button words, e.g. ("OK",) or ("Yes", "No")
+        command  - function to run with the answer
+        x, y     - centre of the box (None = the middle of the window)
+        width    - width in pixels (the height fits the message)
+        type_speed, type_sound - type the message out (see Message)
+        entry    - a TextBox to show under the message, so the player can
+                   type an answer (askstring() / askinteger() do this for you)
+        plus every Popup option (fg, bg, border_color, title_font_size, ...)
+
+    Ask the player to type something (like tkinter's simpledialog):
+        askstring(title, prompt, command)        the text, or None (Cancel)
+        askinteger(title, prompt, command)       a whole number, or None
+    """
+
+    BUTTON_HEIGHT = 40
+
+    def __init__(self, title="Message", message="", buttons=("OK",), command=None,
+                 x=None, y=None, width=380, font_size=None, type_speed=None,
+                 type_sound=None, entry=None, **popup_options):
+        popup_options.setdefault("pad_x", 16)
+        super().__init__(x or 0, y or 0, width, 100, title, center=True, **popup_options)
+        self.message = message
+        self.command = command
+        self.font_size = font_size
+        self.result = None
+        self._auto_place = x is None or y is None
+        self.close_button.command = lambda: self._answer(None)
+        self.text = Message(0, 0, message, width=width - 2 * self.pad_x,
+                            font_size=font_size, padding=0,
+                            type_speed=type_speed, type_sound=type_sound)
+        self.buttons = [Button(0, 0, 10, self.BUTTON_HEIGHT, word, font_size=24,
+                               command=lambda word=word: self._answer(word))
+                        for word in buttons]
+        self.entry = entry             # a TextBox to type into (or None)
+        self._place_parts()
+
+    def _place_parts(self):
+        """Size the box to fit the message, and put the buttons along the bottom."""
+        self.text.config(text=self.message, fg=self.cget("fg"))
+        gap = 10
+        space = self.width - 2 * self.pad_x
+        button_width = (space - gap * (len(self.buttons) - 1)) // max(1, len(self.buttons))
+        self.top_space = self._title_space()
+        top = self.top_space + 10
+        button_y = top + self.text.height + 20
+        if self.entry is not None:
+            # The typing box goes between the message and the buttons
+            self.entry.x = self.pad_x
+            self.entry.y = top + self.text.height + 14
+            button_y = self.entry.y + self.entry.height + 16
+        for i, button in enumerate(self.buttons):
+            button.x = self.pad_x + i * (button_width + gap)
+            button.y = button_y
+            if button.width != button_width:
+                button.config(width=button_width)
+        self.text.x, self.text.y = self.pad_x, top
+        self.height = button_y + self.BUTTON_HEIGHT + 16
+
+    def show(self, message=None, fade_ms=0):
+        """Open the box (optionally with a new message). fade_ms=300 fades it in."""
+        if message is not None:
+            self.message = message
+        self.result = None
+        self.text.restart()                   # type it out again (if type_speed)
+        if self.entry is not None:
+            self.entry.typing = True          # ready to type straight away
+        super().show(fade_ms)
+
+    def _answer(self, answer):
+        self.result = answer
+        self.hide()
+        if self.command:
+            _call_with_answer(self.command, answer)
+
+    def _place_on_screen(self):
+        if self._auto_place and pg.display.get_surface():
+            self.x, self.y = pg.display.get_surface().get_rect().center
+
+    def handle_event(self, event, offset=(0, 0)):
+        if not self.visible:
+            return False
+        if self.closing:                     # fading out: no more clicks
+            return False
+        self._place_on_screen()
+        self._place_parts()
+        if self.text.handle_event(event):     # still typing: show the rest first
+            return True
+        corner = self.get_rect(offset).topleft
+        if self.entry is not None:
+            if event.type == pg.KEYDOWN and event.key not in (pg.K_ESCAPE, pg.K_RETURN,
+                                                               pg.K_KP_ENTER):
+                self.entry.typing = True
+                self.entry.handle_event(event, corner)
+                return True                   # letters go into the box
+            if event.type == pg.MOUSEBUTTONDOWN:
+                self.entry.handle_event(event, corner)
+        if event.type == pg.KEYDOWN:
+            if event.key == pg.K_ESCAPE:
+                self._answer(None)
+            elif event.key in (pg.K_RETURN, pg.K_KP_ENTER) and self.buttons:
+                self._answer(self.buttons[0].text)
+            return True                       # keys don't reach the game
+        if self.close_button.handle_event(event, corner):
+            return True
+        for button in self.buttons:
+            if button.handle_event(event, corner):
+                return True
+        # Clicks anywhere else are used up too, so the game underneath is safe
+        return event.type in (pg.MOUSEBUTTONDOWN, pg.MOUSEBUTTONUP, pg.MOUSEWHEEL)
+
+    def update(self, tick):
+        """Types the message out. Only needed when type_speed is given."""
+        super().update(tick)
+        if self.visible:
+            self.text.update(tick)
+            if self.entry is not None:
+                self.entry.update(tick)       # the typing cursor blinks
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        if self._fade_layer(screen, offset):     # fading in / out
+            return
+        self._place_on_screen()
+        self._place_parts()
+        super().draw(screen, offset)
+        corner = self.get_rect(offset).topleft
+        self.text.draw(screen, corner)
+        if self.entry is not None:
+            self.entry.draw(screen, corner)
+        for button in self.buttons:
+            button.draw(screen, corner)
+
+
+def _ask(title, message, buttons, answers, command, **options):
+    """Make a MessageBox whose answers are turned into True / False / None."""
+    def answer(word):
+        if command:
+            _call_with_answer(command, answers.get(word))
+    box = MessageBox(title, message, buttons=buttons, command=answer, **options)
+    box.show()
+    return box
+
+
+def askyesno(title, message, command=None, **options):
+    """Yes / No box. command gets True (Yes) or False (No / closed)."""
+    return _ask(title, message, ("Yes", "No"), {"Yes": True, "No": False, None: False},
+                command, **options)
+
+
+def askyesnocancel(title, message, command=None, **options):
+    """Yes / No / Cancel box. command gets True, False or None (Cancel / closed)."""
+    return _ask(title, message, ("Yes", "No", "Cancel"),
+                {"Yes": True, "No": False, "Cancel": None, None: None}, command, **options)
+
+
+def askokcancel(title, message, command=None, **options):
+    """OK / Cancel box. command gets True (OK) or False (Cancel / closed)."""
+    return _ask(title, message, ("OK", "Cancel"), {"OK": True, "Cancel": False, None: False},
+                command, **options)
+
+
+def showinfo(title, message, command=None, **options):
+    """A message with an OK button. command (if given) gets "ok"."""
+    return _ask(title, message, ("OK",), {"OK": "ok", None: "ok"}, command, **options)
+
+
+def askstring(title, prompt, command=None, initialvalue="", max_chars=20, show=None,
+              **options):
+    """
+    A box the player types into (like tkinter's simpledialog.askstring).
+    command gets the text typed, or None if they pressed Cancel / X / Escape.
+
+        def got_name(name):
+            if name:
+                scores.add(name, score)
+        name_box = askstring("New high score!", "Enter your name:", command=got_name)
+        name_box.handle_event(event)    # FIRST in handle_inputs()
+        name_box.update(tick)           # makes the cursor blink
+        name_box.draw(screen)           # LAST in draw_game()
+
+    show="*" hides the letters (for a password).
+    """
+    entry = TextBox(0, 0, max_chars=max_chars, text=initialvalue, show=show)
+
+    def answer(word):
+        if command:
+            _call_with_answer(command, entry.get() if word == "OK" else None)
+
+    options.setdefault("width", max(380, entry.width + 32))
+    box = MessageBox(title, prompt, buttons=("OK", "Cancel"), command=answer,
+                     entry=entry, **options)
+    box.show()
+    return box
+
+
+def askinteger(title, prompt, command=None, initialvalue=None, minvalue=None,
+               maxvalue=None, max_chars=10, **options):
+    """
+    Like askstring(), but only whole numbers can be typed, and command gets
+    an int (or None if they pressed Cancel / X / Escape).
+
+        def got_age(age):
+            if age is not None:
+                print("You are", age)
+        age_box = askinteger("Age", "How old are you?", command=got_age,
+                             minvalue=5, maxvalue=99)
+
+    If the number is outside minvalue / maxvalue, the box stays open and
+    says which numbers are allowed.
+    """
+    allowed = "-0123456789" if minvalue is None or minvalue < 0 else "digits"
+    start = "" if initialvalue is None else str(initialvalue)
+    entry = TextBox(0, 0, max_chars=max_chars, text=start, allowed=allowed)
+
+    def answer(word):
+        if word != "OK":
+            if command:
+                _call_with_answer(command, None)
+            return
+        try:
+            number = int(entry.get())
+        except ValueError:
+            number = None
+        too_small = number is not None and minvalue is not None and number < minvalue
+        too_big = number is not None and maxvalue is not None and number > maxvalue
+        if number is None or too_small or too_big:
+            # Not a number we can use: keep the box open and say why
+            if minvalue is not None and maxvalue is not None:
+                rule = f"Type a whole number from {minvalue} to {maxvalue}."
+            elif minvalue is not None:
+                rule = f"Type a whole number of at least {minvalue}."
+            elif maxvalue is not None:
+                rule = f"Type a whole number up to {maxvalue}."
+            else:
+                rule = "Type a whole number."
+            box.show(f"{prompt}\n{rule}")
+            return
+        if command:
+            _call_with_answer(command, number)
+
+    options.setdefault("width", max(380, entry.width + 32))
+    box = MessageBox(title, prompt, buttons=("OK", "Cancel"), command=answer,
+                     entry=entry, **options)
+    box.show()
+    return box
+
+
+# ================================
+# FocusGroup Class (keyboard / controller control of widgets)
+# ================================
+
+class FocusGroup:
+    """
+    Lets the player use widgets with the keyboard or a controller.
+    It is OFF until you set active = True, and only uses the keys you choose,
+    so it won't fight with your game's controls.
+
+    Parameters:
+        *widgets - the widgets to move between, in order
+        keys     - which keys to use:
+                   "arrows" - arrow keys move, Enter / Space press
+                   "tab"    - Tab / Shift+Tab move, Enter / Space press,
+                              arrow keys only change sliders, lists etc.
+                              Good for forms: Tab always moves on, even
+                              out of a TextBox, and moving onto a TextBox
+                              starts typing in it.
+                   "wasd"   - W A S D move, Enter / Space press
+                   or a dict, e.g. {"next": [pg.K_DOWN], "previous": [pg.K_UP],
+                   "activate": [pg.K_RETURN], "left": [pg.K_LEFT], "right": [pg.K_RIGHT]}
+        active   - True to start switched on
+
+    Clicking a widget in the group moves the highlight to it (the widget
+    still gets the click as normal).
+
+    handle_event(event) returns True if it used the event, so you can do:
+        if not menu_focus.handle_event(event):
+            ...your game's own key handling...
+
+    Example:
+        menu_focus = FocusGroup(play_button, volume_slider, music_check)
+        menu_focus.active = True        # e.g. only while the menu is open
+    """
+
+    KEY_SETS = {
+        "arrows": {"next": [pg.K_DOWN], "previous": [pg.K_UP],
+                   "left": [pg.K_LEFT], "right": [pg.K_RIGHT],
+                   "activate": [pg.K_RETURN, pg.K_KP_ENTER, pg.K_SPACE]},
+        "tab": {"next": [pg.K_TAB], "previous": [],          # Shift+Tab handled below
+                "up": [pg.K_UP], "down": [pg.K_DOWN],
+                "left": [pg.K_LEFT], "right": [pg.K_RIGHT],
+                "activate": [pg.K_RETURN, pg.K_KP_ENTER, pg.K_SPACE]},
+        "wasd": {"next": [pg.K_s], "previous": [pg.K_w],
+                 "left": [pg.K_a], "right": [pg.K_d],
+                 "activate": [pg.K_RETURN, pg.K_KP_ENTER, pg.K_SPACE]},
+    }
+
+    def __init__(self, *widgets, keys="arrows", active=False):
+        self.widgets = list(widgets)
+        self.keys = self.KEY_SETS[keys] if isinstance(keys, str) else keys
+        self.tab_mode = keys == "tab"
+        self.index = 0
+        self.joystick = None
+        self._active = False
+        self.active = active
+
+    # Turning it on shows the highlight; off hides it
+    @property
+    def active(self):
+        return self._active
+
+    @active.setter
+    def active(self, on):
+        self._active = on
+        self._show_focus()
+
+    def add(self, *widgets):
+        self.widgets.extend(widgets)
+        self._show_focus()
+
+    def focused_widget(self):
+        usable = [w for w in self.widgets if w.active]
+        if not self._active or not usable:
+            return None
+        if not self.widgets[self.index].active:
+            self.move(1)
+        return self.widgets[self.index]
+
+    def _show_focus(self):
+        for i, widget in enumerate(self.widgets):
+            was_focused = getattr(widget, "focused", False)
+            widget.focused = self._active and i == self.index
+            if isinstance(widget, TextBox):
+                if was_focused and not widget.focused:
+                    widget.typing = False         # moving away stops typing in it
+                elif widget.focused and not was_focused and self.tab_mode:
+                    widget.typing = True          # Tab mode: moving onto it starts typing
+            if widget.focused:
+                inner, parent = widget, widget.parent
+                while parent is not None:            # scroll it into view
+                    if isinstance(parent, ScrolledFrame):
+                        parent.see(inner)
+                    inner, parent = parent, parent.parent
+
+    def focus_on(self, widget):
+        """Move the highlight to this widget."""
+        self.index = self.widgets.index(widget)
+        self._show_focus()
+
+    def move(self, direction):
+        """Move to the next (1) or previous (-1) usable widget."""
+        if not any(w.active for w in self.widgets):
+            return
+        for _ in range(len(self.widgets)):
+            self.index = (self.index + direction) % len(self.widgets)
+            if self.widgets[self.index].active:
+                break
+        self._show_focus()
+
+    def use_joystick(self, joystick, hat="dpad", press_button=None, axis_x=None, axis_y=None):
+        """
+        Also move with a controller. hat / press_button / axis names are ones
+        you bound on the JoystickManager (or raw numbers).
+        Call focus.update(tick) every frame when using a joystick.
+        """
+        self.joystick = joystick
+        self._joy = {"hat": hat, "press": press_button, "x": axis_x, "y": axis_y}
+        self._joy_last = (0, 0)
+        self._joy_timer = 0
+
+    def _do(self, action):
+        """Do an action: next / previous move focus, the rest go to the widget."""
+        widget = self.focused_widget()
+        if widget is None:
+            return False
+        if action in ("next", "previous"):
+            direction = 1 if action == "next" else -1
+            item_action = "down" if direction == 1 else "up"
+            # An open drop-down: move through its choices
+            if isinstance(widget, Combobox) and widget.is_open:
+                return widget.focus_action(item_action)
+            # A Listbox (arrows / wasd keys): move through the items, and
+            # only leave the list at its first / last item
+            if isinstance(widget, Listbox) and widget.items and not self.tab_mode:
+                current = widget.selected
+                at_edge = (current is None and direction == -1) or \
+                    (current is not None and
+                     (current + direction < 0 or current + direction >= len(widget.items)))
+                if not at_edge:
+                    return widget.focus_action(item_action)
+            self.move(direction)
+            return True
+        return widget.focus_action(action)
+
+    def _action_for_key(self, event):
+        if self.tab_mode and event.key == pg.K_TAB and event.mod & pg.KMOD_SHIFT:
+            return "previous"
+        for action, key_list in self.keys.items():
+            if event.key in key_list:
+                return action
+        return None
+
+    def _click(self, event):
+        """A click on one of our widgets moves the highlight to it."""
+        for i, widget in enumerate(self.widgets):
+            if i != self.index and widget.active and \
+                    widget.get_rect(widget._last_offset).collidepoint(event.pos):
+                # The TextBox itself decides if the click starts typing (it
+                # depends on where the click is), so keep what it already chose
+                typing = getattr(widget, "typing", None)
+                self.index = i
+                self._show_focus()
+                if isinstance(widget, TextBox):
+                    widget.typing = typing
+                return
+
+    def handle_event(self, event):
+        """Use the event if it is one of our keys. Returns True if used."""
+        if not self._active:
+            return False
+        if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+            self._click(event)
+            return False            # the widget still gets the click
+        widget = self.focused_widget()
+        # A Table cell being edited gets every key (Tab moves to the next cell)
+        if getattr(widget, "editing", None) and event.type == pg.KEYDOWN:
+            return widget._edit_key(event)
+        # Tab mode: Tab / Shift+Tab always move on, even out of a TextBox
+        if self.tab_mode and event.type == pg.KEYDOWN and event.key == pg.K_TAB:
+            self._do(self._action_for_key(event))
+            return True
+        # A TextBox that is being typed in gets every key (Enter / Escape finish)
+        if isinstance(widget, TextBox) and widget.typing and event.type == pg.KEYDOWN:
+            widget._key(event)
+            if event.key in (pg.K_RETURN, pg.K_KP_ENTER, pg.K_ESCAPE):
+                widget.typing = False
+            return True
+        if event.type != pg.KEYDOWN:
+            return False
+        action = self._action_for_key(event)
+        if action is None:
+            return False            # not one of our keys: the game can use it
+        self._do(action)
+        return True
+
+    def update(self, tick):
+        """Only needed when using a joystick: reads the D-pad / stick."""
+        if not (self._active and self.joystick):
+            return
+        joy = self._joy
+        dx, dy = 0, 0
+        if joy["hat"] is not None:
+            try:
+                dx, dy = self.joystick.get_hat(joy["hat"])
+                dy = -dy                       # hat up is +1
+            except ValueError:
+                pass
+        if joy["x"] is not None and abs(self.joystick.get_axis(joy["x"])) > 0.5:
+            dx = 1 if self.joystick.get_axis(joy["x"]) > 0 else -1
+        if joy["y"] is not None and abs(self.joystick.get_axis(joy["y"])) > 0.5:
+            dy = 1 if self.joystick.get_axis(joy["y"]) > 0 else -1
+
+        # Repeat while held: first move straight away, then every 200 ms
+        self._joy_timer -= tick
+        if (dx, dy) != self._joy_last or ((dx or dy) and self._joy_timer <= 0):
+            self._joy_timer = 400 if (dx, dy) != self._joy_last else 200
+            if dy > 0:
+                self._do("next")
+            elif dy < 0:
+                self._do("previous")
+            elif dx > 0:
+                self._do("right")
+            elif dx < 0:
+                self._do("left")
+        self._joy_last = (dx, dy)
+
+        if joy["press"] is not None and self.joystick.was_pressed(joy["press"]):
+            self._do("activate")
+
+
+# ================================
+# Dialogue Class (conversations with names, portraits and choices)
+# ================================
+
+class Dialogue(Widget):
+    """
+    A conversation box, like the ones in Zelda, Pokemon or Undertale:
+    the speaker's name, a portrait, text that types out, and choices that
+    jump to other parts of the conversation.
+
+    The words go in a "script": a dict of named parts. Each part is a list
+    of lines. A line is just a string, or a dict with some of these keys:
+        "text"     - the words (needed). "\\n" starts a new line.
+        "speaker"  - name shown at the top. Left out = same as the line
+                     before. None = no name (good for a narrator).
+        "portrait" - a picture for this line only (e.g. a surprised face)
+        "choices"  - list of [button text, part to jump to]. Add a third
+                     item {"if": "flag_name"} to only show the choice when
+                     that flag is True. Jumping to "end" ends the talk.
+        "goto"     - after this line, jump to another part
+        "set"      - flags to set, e.g. {"has_sword": True}
+        "do"       - name of a function in actions= to run (no arguments)
+    When a part runs out of lines, the conversation ends.
+
+        wizard_talk = {
+            "start": [
+                {"speaker": "Wizard", "text": "Hello, traveller!"},
+                "Will you take this sword?",          # same speaker
+                {"text": "Well?", "choices": [["Yes please", "take"],
+                                              ["No thanks", "end"]]},
+            ],
+            "take": [
+                {"text": "Use it wisely!", "set": {"has_sword": True}},
+            ],
+        }
+        talk = Dialogue(20, 400, 760, 180, script=wizard_talk,
+                        speakers={"Wizard": {"portrait": "wizard.png"}})
+
+    In your game loop:
+        talk.start()                  # open it at the "start" part
+        talk.start("again")           # ...or at another part
+        if talk.handle_event(event):  # FIRST in handle_inputs()
+            continue                  # True = it used the click / key
+        talk.update(tick)             # in update(tick) - types the text out
+        talk.draw(screen)             # LAST in draw_game(), so it is on top
+        if not talk.talking: ...      # e.g. only move the player when not talking
+
+    Controls: click (anywhere), Space or Enter shows the rest of the line,
+    then goes to the next line. Choices: click one, or use Up / Down and
+    Enter / Space. While talking it takes every click, so the game
+    underneath doesn't also shoot or jump. Other keys (e.g. Escape) are
+    left for your game. Choices pop up just above the box.
+
+    Parameters:
+        x, y, width, height - position and size of the box
+        script     - a dict of parts, or the name of a .json file laid out
+                     the same way (choices are lists in JSON)
+        speakers   - settings for each speaker, so you don't repeat them:
+                     {"Wizard": {"portrait": "wizard.png",
+                                 "name_fg": (180, 120, 255), "side": "right"}}
+                     side = which side the portrait goes ("left" or "right")
+        actions    - functions for "do", e.g. {"give_sword": give_sword}
+        flags      - a dict of starting flags (e.g. loaded from a save file)
+        type_speed - letters per second (0 = show each line at once)
+        type_sound - a SoundEffect played as the letters appear
+        on_end     - function (no arguments) run when the talk ends
+        keys       - keys for choosing: "arrows", "wasd", "tab" (like
+                     FocusGroup), or None for the mouse only
+        portrait_size - size of the (square) portrait in pixels
+                     (None = fills the height of the box)
+        fg, bg     - text and box colours
+        name_fg    - colour of the speaker's name; name_bg - a colour
+                     behind the name (None = none)
+        border_color, border_width, font_name, font_size, font_style
+        center     - if True, (x, y) is the centre of the box
+
+    Also:
+        talk.say("Sign", "Danger! Keep out.")   one line, no script needed
+        talk.next()          what a click / Space does
+        talk.choose(0)       pick the first choice (same as clicking it)
+        talk.stop()          end now (runs on_end)
+        talk.talking         True while the box is open
+        talk.part, talk.line where it is up to
+        talk.flags           the flags dict - save it with
+                             save_data("save.json", flags=talk.flags)
+
+    Mistakes in the script (a jump to a part that doesn't exist, a spelling
+    mistake in a key...) are printed as warnings when it is loaded, and
+    the game keeps running. Debug.on (F1) outlines the parts of the box
+    and shows which part and line it is up to.
+    """
+
+    LINE_KEYS = ("text", "speaker", "portrait", "choices", "goto", "set", "do")
+    NEXT_KEYS = (pg.K_SPACE, pg.K_RETURN, pg.K_KP_ENTER)
+    PAD = 12                      # space inside the box
+    CHOICE_HEIGHT = 36
+
+    def __init__(self, x, y=0, width=600, height=160, script=None, speakers=None,
+                 actions=None, flags=None, type_speed=40, type_sound=None, on_end=None,
+                 keys="arrows", portrait_size=None, fg=None, bg=None, name_fg=None,
+                 name_bg=None, border_color=None, border_colour=None, border_width=None,
+                 font_name=None, font_size=None, center=False, style=None, cursor=None,
+                 font_style=None):
+        # It starts hidden: start() opens it
+        super().__init__(x, y, width, height, center, False, style)
+        self.cursor = cursor
+        self.speakers = speakers or {}
+        self.actions = actions or {}
+        # Keep the SAME dict the student gave, so their copy sees the changes
+        self.flags = flags if flags is not None else {}
+        self.type_speed = type_speed
+        self.type_sound = type_sound
+        self.on_end = on_end
+        self.keys = keys
+        self.portrait_size = portrait_size
+        self.fg = fg
+        self.bg = bg
+        self.name_fg = name_fg
+        self.name_bg = name_bg
+        self.border_color = _pick(border_color, border_colour)
+        self.border_width = border_width
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+
+        self.part = None              # the part being shown, e.g. "start"
+        self.line = 0                 # which line of that part (0 = first)
+        self._current = {}            # the line being shown, as a dict
+        self._speaker = None          # the name of whoever is talking
+        self._quick = {}              # parts made by say() or for error messages
+        self._load_error = None
+        self._buttons = []            # one Button per choice
+        self._focus = None            # FocusGroup for choosing with keys
+        self._blink = 0               # ms, for the "press to continue" arrow
+        # The words are shown by a Message, which does the typing out
+        self.text = Message(0, 0, "", width=100, padding=0,
+                            type_speed=type_speed, type_sound=type_sound)
+        self.load(script)
+
+    # ---------- the script ----------
+
+    def load(self, script):
+        """Use a new script: a dict of parts, or the name of a .json file."""
+        self.script = {}
+        self._load_error = None
+        if script is None:
+            return
+        if isinstance(script, str):
+            script = self._read_json(script)
+        if not isinstance(script, dict):
+            self._load_error = "The script should be a dict of parts"
+            _warn_once("Dialogue: the script should be a dict like "
+                       "{\"start\": [\"Hello!\", \"Bye!\"]}")
+            return
+        self.script = script
+        self._check_script()
+
+    def _read_json(self, filename):
+        """Load a script from a JSON file. A missing or broken file never crashes."""
+        import json
+        import os
+        # Look where the student said first, then next to the game
+        path = filename if os.path.exists(filename) else _save_path(filename)
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError) as error:
+            self._load_error = f"Couldn't load {os.path.basename(filename)}"
+            _warn_once(f"Dialogue: couldn't load {filename} ({error})")
+            return {}
+
+    def _lines_of(self, part):
+        """The list of lines in a part. A single line on its own also works."""
+        lines = self._quick.get(part, self.script.get(part, []))
+        if isinstance(lines, (str, dict)):
+            return [lines]
+        return list(lines)
+
+    @staticmethod
+    def _line_dict(line):
+        """Turn a line into a dict: "Hello" -> {"text": "Hello"}."""
+        if isinstance(line, dict):
+            return line
+        return {"text": str(line)}
+
+    def _check_script(self):
+        """Print a warning for each mistake in the script (once each)."""
+        import os
+        parts = ", ".join(str(p) for p in self.script)
+
+        def check_target(target, where):
+            if target != "end" and target not in self.script:
+                _warn_once(f"Dialogue: {where} jumps to '{target}' but there is no "
+                           f"part called that. Parts are: {parts} (or \"end\")")
+
+        def check_picture(picture, where):
+            if isinstance(picture, str) and not os.path.exists(picture):
+                _warn_once(f"Dialogue: can't find the portrait '{picture}' ({where})")
+
+        for name, info in self.speakers.items():
+            check_picture(info.get("portrait"), f"speaker '{name}'")
+        for part in self.script:
+            for number, line in enumerate(self._lines_of(part)):
+                line = self._line_dict(line)
+                where = f"part '{part}', line {number + 1}"
+                for key in line:
+                    if key not in self.LINE_KEYS:
+                        _warn_once(f"Dialogue: {where} has the key '{key}'. Keys that "
+                                   f"work: {', '.join(self.LINE_KEYS)}")
+                if "text" not in line:
+                    _warn_once(f"Dialogue: {where} has no \"text\"")
+                if "goto" in line:
+                    check_target(line["goto"], where)
+                if "do" in line and line["do"] not in self.actions:
+                    _warn_once(f"Dialogue: {where} wants to do '{line['do']}' but it is "
+                               f"not in actions=, e.g. actions={{\"{line['do']}\": "
+                               f"{line['do']}}}")
+                check_picture(line.get("portrait"), where)
+                for choice in line.get("choices", []):
+                    if not isinstance(choice, (list, tuple)) or len(choice) < 2:
+                        _warn_once(f"Dialogue: {where} has a choice {choice!r} - each "
+                                   f"choice should be [\"button text\", \"part\"]")
+                    else:
+                        check_target(choice[1], f"the choice '{choice[0]}' in {where}")
+
+    # ---------- starting, moving on and stopping ----------
+
+    @property
+    def talking(self):
+        """True while the conversation box is open."""
+        return self.visible
+
+    def start(self, part="start"):
+        """Open the conversation at a part (the "start" part if you leave it out)."""
+        if part not in self.script and part not in self._quick:
+            # Show the problem in the box, where the student will see it
+            if self._load_error:
+                message = self._load_error
+            else:
+                message = f"(The script has no part called '{part}')"
+                _warn_once(f"Dialogue: there is no part called '{part}'. Parts are: "
+                           f"{', '.join(str(p) for p in self.script)}")
+            self._quick = {"(problem)": [{"speaker": None, "text": message}]}
+            part = "(problem)"
+        self._speaker = None
+        self.visible = True
+        self._go_to(part)
+
+    def say(self, speaker, text=None):
+        """
+        Show one line with no script, e.g. say("Sign", "Danger! Keep out.").
+        say("The door is locked.") shows it with no name.
+        """
+        if text is None:
+            speaker, text = None, speaker
+        self._quick = {"(say)": [{"speaker": speaker, "text": str(text)}]}
+        self.start("(say)")
+
+    def _go_to(self, part):
+        """Jump to the first line of a part ("end" ends the conversation)."""
+        if part == "end" or part is None:
+            self.stop()
+            return
+        self.part = part
+        self.line = 0
+        self._show_line()
+
+    def _show_line(self):
+        """Show the line we are up to (or end, if the part has run out)."""
+        lines = self._lines_of(self.part)
+        if self.line >= len(lines):
+            self.stop()
+            return
+        line = self._line_dict(lines[self.line])
+        if "speaker" in line:
+            self._speaker = line["speaker"]
+        self._current = line
+        self.text.config(text=str(line.get("text", "")))
+        self.text.restart()           # type it out, even if it's the same words
+        self._blink = 0
+        self._make_buttons()
+        if isinstance(line.get("set"), dict):
+            for name, value in line["set"].items():
+                self.flags[name] = value
+        # Done last: the function might start a different conversation
+        action = self.actions.get(line.get("do"))
+        if action:
+            action()
+
+    def next(self):
+        """Show the rest of the line, or go on to the next line (a click / Space)."""
+        if not self.visible:
+            return
+        if self.text.typing:
+            self.text.skip()
+            return
+        if self._choices():
+            return                    # the player has to pick a choice
+        if "goto" in self._current:
+            self._go_to(self._current["goto"])
+            return
+        self.line += 1
+        self._show_line()
+
+    def choose(self, number):
+        """Pick a choice: 0 = the first one (same as clicking it)."""
+        choices = self._choices()
+        if self.visible and 0 <= number < len(choices):
+            self._go_to(choices[number][1])
+
+    def stop(self):
+        """End the conversation now (runs on_end)."""
+        was_talking = self.visible
+        self.visible = False
+        self.part = None
+        self._buttons = []
+        self._focus = None
+        if was_talking and self.on_end:
+            self.on_end()
+
+    # ---------- choices ----------
+
+    def _choices(self):
+        """The choices on this line that can be shown (checking any "if")."""
+        shown = []
+        for choice in self._current.get("choices", []):
+            if not isinstance(choice, (list, tuple)) or len(choice) < 2:
+                continue
+            extra = choice[2] if len(choice) > 2 and isinstance(choice[2], dict) else {}
+            if "if" in extra and not self.flags.get(extra["if"]):
+                continue              # that flag isn't True yet: hide it
+            shown.append(choice)
+        return shown
+
+    def _make_buttons(self):
+        """One Button for each choice, all the same width."""
+        choices = self._choices()
+        # Each Button fits its own text first, then they all get the widest width
+        self._buttons = [Button(0, 0, None, self.CHOICE_HEIGHT, str(choice[0]),
+                                font_size=24,
+                                command=lambda n=number: self.choose(n))
+                         for number, choice in enumerate(choices)]
+        widest = max([button.width for button in self._buttons] or [0])
+        for button in self._buttons:
+            button.config(width=widest)
+        self._focus = None
+        if self._buttons and self.keys:
+            self._focus = FocusGroup(*self._buttons, keys=self.keys, active=True)
+
+    def _choices_showing(self):
+        """Choices appear once the line has finished typing."""
+        return bool(self._buttons) and not self.text.typing
+
+    def _place_buttons(self, box):
+        """Stack the choices just above the box's right side (below it if no room)."""
+        gap = 6
+        total = len(self._buttons) * (self.CHOICE_HEIGHT + gap)
+        top = box.top - total
+        if top < 0:
+            top = box.bottom + gap
+        for number, button in enumerate(self._buttons):
+            button.x = box.right - button.width
+            button.y = top + number * (self.CHOICE_HEIGHT + gap)
+
+    # ---------- the game loop ----------
+
+    def handle_event(self, event, offset=(0, 0)):
+        """Returns True if it used the event (always for clicks while talking)."""
+        if not self.visible:
+            return False
+        clicks = (pg.MOUSEBUTTONDOWN, pg.MOUSEBUTTONUP, pg.MOUSEWHEEL)
+        if self._choices_showing():
+            self._place_buttons(self.get_rect(offset))
+            for button in self._buttons:
+                if button.handle_event(event):
+                    return True
+            if self._focus and self._focus.handle_event(event):
+                return True
+            return event.type in clicks       # clicks elsewhere do nothing
+        left_click = event.type == pg.MOUSEBUTTONDOWN and event.button == 1
+        next_key = event.type == pg.KEYDOWN and event.key in self.NEXT_KEYS
+        if left_click or next_key:
+            self.next()
+            return True
+        return event.type in clicks           # other clicks don't reach the game
+
+    def update(self, tick):
+        """Types the text out. tick = milliseconds since the last frame."""
+        if not self.visible:
+            return
+        self.text.type_speed = self.type_speed      # in case config() changed them
+        self.text.type_sound = self.type_sound
+        self.text.update(tick)
+        self._blink += tick
+
+    def _speaker_info(self):
+        """The speakers= settings for whoever is talking (or {})."""
+        return self.speakers.get(self._speaker, {}) or {}
+
+    def _portrait(self, size):
+        """The portrait picture for this line, scaled to size (or None)."""
+        picture = self._current.get("portrait", self._speaker_info().get("portrait"))
+        if picture is None:
+            return None
+        try:
+            return load_image(picture, (size, size))
+        except (pg.error, FileNotFoundError, OSError):
+            _warn_once(f"Dialogue: can't load the portrait '{picture}'")
+            return None
+
+    def _areas(self, box):
+        """Work out where the portrait, the name and the text go inside the box."""
+        pad = self.PAD
+        size = self.portrait_size or box.height - 2 * pad
+        picture = self._portrait(size)
+        text_left, text_right = box.x + pad, box.right - pad
+        portrait_rect = None
+        if picture is not None:
+            if self._speaker_info().get("side") == "right":
+                portrait_rect = pg.Rect(box.right - pad - size, box.y + pad, size, size)
+                text_right = portrait_rect.x - pad
+            else:
+                portrait_rect = pg.Rect(box.x + pad, box.y + pad, size, size)
+                text_left = portrait_rect.right + pad
+        top = box.y + pad
+        name_pos = None
+        if self._speaker:
+            name_pos = (text_left, top)
+            top += self._font().get_height() + 4
+        text_rect = pg.Rect(text_left, top, max(10, text_right - text_left),
+                            max(10, box.bottom - pad - top))
+        return picture, portrait_rect, name_pos, text_rect
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        box = self.get_rect(offset)
+        radius = self.cget("border_radius") or 0
+        pg.draw.rect(screen, self.cget("bg"), box, border_radius=radius)
+        border = self.cget("border_width") or 0
+        if border and self.cget("border_color") is not None:
+            pg.draw.rect(screen, self.cget("border_color"), box, border, radius)
+
+        picture, portrait_rect, name_pos, text_rect = self._areas(box)
+        if picture is not None:
+            screen.blit(picture, portrait_rect)
+            if border and self.cget("border_color") is not None:
+                pg.draw.rect(screen, self.cget("border_color"), portrait_rect, 2)
+
+        # The speaker's name (a speaker can have their own name colour)
+        if name_pos is not None:
+            name_fg = self._speaker_info().get("name_fg") or self.cget("name_fg")
+            name = self._font().render(str(self._speaker), True, name_fg)
+            if self.cget("name_bg") is not None:
+                behind = name.get_rect(topleft=name_pos).inflate(12, 4)
+                pg.draw.rect(screen, self.cget("name_bg"), behind, border_radius=4)
+            screen.blit(name, name_pos)
+
+        # The words (the Message types them out)
+        self.text.fg = self.cget("fg")
+        self.text.font_name = self.cget("font_name")
+        self.text.font_size = self.cget("font_size")
+        self.text.font_style = self.cget("font_style")
+        self.text.width = text_rect.width
+        self.text.x, self.text.y = text_rect.topleft
+        self.text.draw(screen)
+        if self.text.height > text_rect.height + 2:
+            _warn_once(f"Dialogue: the line \"{str(self._current.get('text'))[:30]}...\" "
+                       f"is too long for the box. Make the box taller or split it "
+                       f"into two lines.")
+
+        # "Press to continue" triangle, blinking, when the line is finished
+        if not self.text.typing and not self._buttons and (self._blink // 400) % 2 == 0:
+            x, y = box.right - self.PAD - 8, box.bottom - self.PAD - 4
+            pg.draw.polygon(screen, self.cget("fg"), [(x - 8, y - 10), (x + 8, y - 10),
+                                                      (x, y)])
+
+        if self._choices_showing():
+            self._place_buttons(box)
+            for button in self._buttons:
+                button.draw(screen)
+
+        if Debug.on:
+            self._draw_debug(screen, box, portrait_rect, text_rect)
+
+    def _draw_debug(self, screen, box, portrait_rect, text_rect):
+        """F1 view: outline each area and show where the conversation is up to."""
+        pink, green = (255, 0, 255), (0, 255, 0)
+        if portrait_rect is not None:
+            pg.draw.rect(screen, pink, portrait_rect, 1)
+        pg.draw.rect(screen, green, text_rect, 1)
+        for button in self._buttons:
+            pg.draw.rect(screen, pink, button.rect, 1)
+        draw_text(screen, f"part: {self.part}, line {self.line + 1}",
+                  box.x + 4, box.bottom + 2, fg=green, font_size=18)
+
+
+# ================================
+# Camera Class
+# ================================
+
+class Camera:
+    """
+    Scrolls the world so it follows a target (e.g. the player).
+
+    Parameters:
+        width, height - size of the whole world / map in pixels
+        screen_size   - (width, height) of the window
+        smooth        - how quickly it catches up each frame (0.1 = smooth,
+                        1.0 = instant)
+        deadzone      - (width, height) of a box in the middle of the screen.
+                        The target moves freely inside it; the camera only
+                        moves when the target pushes past its edge.
+                        0 = no box (the camera always centres the target).
+        lookahead     - pixels to look ahead in the direction the target
+                        moves. A number = sideways only (platformers),
+                        (x, y) = both ways (top-down games). 0 = off.
+
+    Use camera.follow(player), call camera.update(tick) every frame, and draw
+    things at camera.apply(thing.rect).
+
+        camera.snap()                 # jump to the target (start of a level)
+        camera.on_screen(enemy)       # True if it can be seen
+        camera.shake(300, 8)          # an explosion! (stops while timers are paused)
+    With Debug on (F1) the deadzone box is drawn (camera.draw_debug(screen)).
+    """
+
+    def __init__(self, width, height, screen_size, smooth=0.1, deadzone=0, lookahead=0):
+        self.width = width
+        self.height = height
+        self.screen_w, self.screen_h = screen_size   # area of the world shown
+        self.offset = pg.Vector2(0, 0)
+        self.target = None
+        self.smooth = smooth
+        self.shake_offset = pg.Vector2(0, 0)
+        self._shake_until = 0
+        self._shake_strength = 0
+        # deadzone / lookahead: a number or a pair -> always kept as (x, y)
+        self.deadzone = (deadzone, deadzone) if isinstance(deadzone, (int, float)) else tuple(deadzone)
+        if isinstance(lookahead, (int, float)):
+            self.lookahead = (lookahead, 0)          # a number = sideways only
+        else:
+            self.lookahead = tuple(lookahead)
+        self._look = pg.Vector2(0, 0)        # how far ahead it looks right now
+        self._facing = pg.Vector2(0, 0)      # the way the target last moved
+        self._last_pos = None                # where the target was last frame
+
+    def shake(self, ms=200, strength=6):
+        """
+        Shake the view, e.g. for an explosion or a big hit.
+        Uses game time: no shaking while pause_timers() is on, and the rest of
+        the shake happens after resume_timers().
+        """
+        self._shake_until = _now() + ms
+        self._shake_strength = strength
+
+    def follow(self, target):
+        """Follow an object that has a .rect (e.g. a SpriteObject)."""
+        self.target = target
+
+    def _view_centre_wanted(self, tick, use_deadzone=True):
+        """Where the middle of the view should be (before the map edges)."""
+        centre = pg.Vector2(self.target.rect.center)
+
+        # Lookahead: lean the view the way the target is moving
+        if self.lookahead != (0, 0):
+            if self._last_pos is not None:
+                moved = centre - self._last_pos
+                for axis in (0, 1):
+                    if abs(moved[axis]) > 0.5:           # standing still keeps the last way
+                        self._facing[axis] = 1 if moved[axis] > 0 else -1
+            self._last_pos = pg.Vector2(centre)     # a copy: centre changes below
+            look = pg.Vector2(self._facing.x * self.lookahead[0],
+                              self._facing.y * self.lookahead[1])
+            # Lean over gently, so turning round doesn't flick the screen
+            frames = 1 if tick is None else tick / (1000 / 60)
+            self._look += (look - self._look) * min(1, 1 - 0.95 ** frames)
+            centre += self._look
+
+        # Deadzone: only move when the target is outside the box
+        if use_deadzone and self.deadzone != (0, 0):
+            view_centre = self.offset + pg.Vector2(self.screen_w, self.screen_h) / 2
+            for axis in (0, 1):
+                half = self.deadzone[axis] / 2
+                gap = centre[axis] - view_centre[axis]
+                if abs(gap) <= half:
+                    centre[axis] = view_centre[axis]     # inside the box: stay put
+                else:
+                    centre[axis] -= half if gap > 0 else -half
+        return centre
+
+    def _clamp(self, wanted):
+        """Don't show past the edges of the map."""
+        wanted.x = max(0, min(wanted.x, self.width - self.screen_w))
+        wanted.y = max(0, min(wanted.y, self.height - self.screen_h))
+        return wanted
+
+    def update(self, tick=None):
+        """
+        Move towards the target. Pass tick so the smoothing is the same
+        speed at any frame rate.
+        """
+        import random
+        timers_paused = _timer_pause["since"] is not None
+        if _now() < self._shake_until and not timers_paused:
+            s = self._shake_strength
+            self.shake_offset.update(random.uniform(-s, s), random.uniform(-s, s))
+        else:
+            self.shake_offset.update(0, 0)
+        if not self.target:
+            return
+
+        # Where the camera wants to be: target in the middle of the view
+        centre = self._view_centre_wanted(tick)
+        wanted = self._clamp(centre - pg.Vector2(self.screen_w, self.screen_h) / 2)
+
+        # Smooth follow (60 frames per second is the "normal" speed)
+        amount = self.smooth
+        if tick is not None:
+            amount = 1 - (1 - self.smooth) ** (tick / (1000 / 60))
+        self.offset += (wanted - self.offset) * min(1, amount)
+
+    def snap(self):
+        """
+        Jump straight to the target, with no gliding. Use it at the start of
+        a level, after a respawn or a teleport:
+            camera.follow(player)
+            camera.snap()
+        """
+        if not self.target:
+            return
+        self._last_pos = None
+        centre = self._view_centre_wanted(None, use_deadzone=False)
+        self.offset = self._clamp(centre - pg.Vector2(self.screen_w, self.screen_h) / 2)
+
+    def on_screen(self, thing, margin=0):
+        """
+        True if thing (a sprite, Rect or (x, y) point in the world) can be
+        seen, or is within margin pixels of the screen.
+            if camera.on_screen(enemy, margin=100):
+                enemy.update(tick)
+        """
+        view = pg.Rect(int(self.offset.x), int(self.offset.y),
+                       int(self.screen_w) + 1, int(self.screen_h) + 1).inflate(margin * 2, margin * 2)
+        if isinstance(thing, pg.Rect):
+            return view.colliderect(thing)
+        if hasattr(thing, "rect"):
+            return view.colliderect(thing.rect)
+        return view.collidepoint(thing)
+
+    def draw_debug(self, screen):
+        """Draw the deadzone box and the lookahead (World does this when F1 is on)."""
+        middle = pg.Vector2(self.screen_w, self.screen_h) / 2
+        if self.deadzone != (0, 0):
+            box = pg.Rect(0, 0, self.deadzone[0], self.deadzone[1])
+            box.center = (round(middle.x), round(middle.y))
+            pg.draw.rect(screen, (255, 0, 255), box, 1)
+        if self.lookahead != (0, 0) and self.target:
+            here = self.apply_pos(self.target.rect.center)
+            pg.draw.line(screen, (255, 0, 255), here,
+                         (here[0] + self._look.x, here[1] + self._look.y), 2)
+
+    def apply(self, rect, parallax=1.0):
+        """
+        Return where a world rect appears on screen.
+        parallax: 1 = moves with the world, 0.5 = half as fast (far away),
+        0 = stays still on the screen.
+        """
+        return rect.move(-self.offset.x * parallax - self.shake_offset.x,
+                         -self.offset.y * parallax - self.shake_offset.y)
+
+    def apply_pos(self, pos, parallax=1.0):
+        """Return where a world (x, y) appears on screen (parallax as in apply)."""
+        return (pos[0] - self.offset.x * parallax - self.shake_offset.x,
+                pos[1] - self.offset.y * parallax - self.shake_offset.y)
+
+    def screen_to_world(self, pos):
+        """Turn a screen position (e.g. the mouse) into a world position."""
+        return (pos[0] + self.offset.x, pos[1] + self.offset.y)
+
+
+# ================================
+# Zoom Camera Class
+# ================================
+
+class ZoomCamera:
+    """
+    Adds zoom to a Camera. zoom=2.0 shows things twice as big,
+    zoom=0.5 shows twice as much of the world.
+
+    Parameters:
+        base_camera - the Camera to zoom
+        screen_size - (width, height) of the window
+        zoom        - starting zoom
+        smooth      - False = crisp pixels (best for pixel art),
+                      True = smooth scaling
+
+    Use zoom_camera.update(tick) and zoom_camera.draw_world(world, screen)
+    instead of the base camera's.
+    """
+
+    MIN_ZOOM = 0.3
+    MAX_ZOOM = 6.0
+
+    def __init__(self, base_camera, screen_size, zoom=2.0, smooth=False):
+        self.base = base_camera
+        self.screen_w, self.screen_h = screen_size
+        self.smooth = smooth
+        self.render = None
+        self.set_zoom(zoom)
+
+    def set_zoom(self, z):
+        """Change the zoom (kept between MIN_ZOOM and MAX_ZOOM)."""
+        self.zoom = max(self.MIN_ZOOM, min(self.MAX_ZOOM, z))
+        # The base camera now shows a bigger or smaller part of the world
+        self.base.screen_w = self.screen_w / self.zoom
+        self.base.screen_h = self.screen_h / self.zoom
+
+    def update(self, tick=None):
+        self.base.update(tick)
+
+    def snap(self):
+        """Jump straight to the target (see Camera.snap)."""
+        self.base.snap()
+
+    def apply(self, rect):
+        """
+        Where a world rect appears on the zoomed screen (bigger by the zoom).
+        Handy for debug boxes drawn on top: body.draw_debug(screen, zoom_camera)
+        """
+        r = self.base.apply(rect)
+        return pg.Rect(round(r.x * self.zoom), round(r.y * self.zoom),
+                       round(r.width * self.zoom), round(r.height * self.zoom))
+
+    def apply_pos(self, pos):
+        """Where a world (x, y) appears on the zoomed screen."""
+        x, y = self.base.apply_pos(pos)
+        return (x * self.zoom, y * self.zoom)
+
+    def on_screen(self, thing, margin=0):
+        """True if thing can be seen at the current zoom (see Camera.on_screen)."""
+        return self.base.on_screen(thing, margin)
+
+    def shake(self, ms=200, strength=6):
+        """Shake the view (see Camera.shake)."""
+        self.base.shake(ms, strength)
+
+    def screen_to_world(self, pos):
+        """Turn a screen position (e.g. the mouse) into a world position."""
+        return self.base.screen_to_world((pos[0] / self.zoom, pos[1] / self.zoom))
+
+    def draw_world(self, world, screen):
+        """Draw the world at the current zoom onto the screen."""
+        view_size = (max(1, int(self.base.screen_w)), max(1, int(self.base.screen_h)))
+        if self.render is None or self.render.get_size() != view_size:
+            self.render = pg.Surface(view_size, pg.SRCALPHA)
+
+        # Draw the visible part of the world, then scale it to fill the screen
+        self.render.fill((0, 0, 0, 0))
+        world.draw(self.render)
+        if self.smooth:
+            zoomed = pg.transform.smoothscale(self.render, (self.screen_w, self.screen_h))
+        else:
+            zoomed = pg.transform.scale(self.render, (self.screen_w, self.screen_h))
+        screen.blit(zoomed, (0, 0))
+
+
+
+# ================================
+# Background Class (parallax)
+# ================================
+
+class Background:
+    """
+    A background picture that scrolls slower than the world (parallax), so
+    far-away things look far away.
+
+    Parameters:
+        image     - a filename or Surface
+        parallax  - 0 = stays still on the screen (sky), 1 = moves with the
+                    world, 0.3 = far away and slow
+        repeat_x  - True: the picture repeats left and right forever
+        repeat_y  - True: it also repeats up and down
+        x, y      - where it is drawn (the top-left of one copy)
+
+    Draw backgrounds first, furthest away first:
+        sky = Background("sky.png", parallax=0)
+        hills = Background("hills.png", parallax=0.3, y=250)
+        sky.draw(screen, camera)
+        hills.draw(screen, camera)
+        world.draw(screen)
+    With a ZoomCamera, draw backgrounds straight onto the screen before
+    zoom_camera.draw_world(...): they scroll at the zoomed speed, but the
+    picture itself is not made bigger.
+    """
+
+    def __init__(self, image, parallax=0.5, repeat_x=True, repeat_y=False, x=0, y=0):
+        if isinstance(image, str):
+            image = load_image(image)
+        self.image = image
+        self.parallax = parallax
+        self.repeat_x = repeat_x
+        self.repeat_y = repeat_y
+        self.x = x
+        self.y = y
+        self.visible = True
+
+    def update(self, tick):
+        pass        # here so it can go in a list with other objects
+
+    def draw(self, screen, camera=None):
+        """Draw it (pass the Camera or ZoomCamera so it scrolls)."""
+        if not self.visible:
+            return
+        offset, shake = pg.Vector2(0, 0), pg.Vector2(0, 0)
+        if camera is not None:
+            base = getattr(camera, "base", camera)       # a ZoomCamera has a base Camera
+            zoom = getattr(camera, "zoom", 1)
+            offset = base.offset * zoom
+            shake = base.shake_offset * zoom
+        left = self.x - offset.x * self.parallax - shake.x
+        top = self.y - offset.y * self.parallax - shake.y
+        w, h = self.image.get_size()
+        screen_w, screen_h = screen.get_size()
+        xs = range(int(left % w) - w, screen_w, w) if self.repeat_x else [int(left)]
+        ys = range(int(top % h) - h, screen_h, h) if self.repeat_y else [int(top)]
+        for x in xs:
+            for y in ys:
+                screen.blit(self.image, (x, y))
+
+
+# ================================
+# Animator Class
+# ================================
+
+class Animator:
+    """
+    Plays animations from:
+      - A list of individual images, OR
+      - A sprite sheet divided into tiles.
+
+    Supports:
+      - Multiple named animations with custom frame ranges
+      - Delta time frame advancement
+      - Play once or looped animations
+      - Flipping/inverting animations horizontally or vertically
+      - A frame rate for each animation: add_animation(..., frame_rate=16)
+      - Going back to another animation after a one-off:
+            animator.play_once("attack", then="idle")
+      - Running a function on a frame (footsteps, the hit of a sword):
+            animator.on_frame("walk", 1, step_sound.play)
+
+    Parameters:
+        source      - a list of image files (or Surfaces), or one sprite sheet file
+        from_sheet  - True if source is a sprite sheet
+        tile_width, tile_height - size of one frame on the sprite sheet
+        rows, cols  - how many frames down and across the sprite sheet
+        frame_rate  - frames per second
+        scale       - make every frame bigger (2 = double size)
+
+    Call animator.update(tick) every frame; it returns the image to draw.
+    """
+
+    def __init__(self, source, from_sheet=False,
+                 tile_width=0, tile_height=0, rows=1, cols=1,
+                 frame_rate=8, scale=1):
+        self.from_sheet = from_sheet
+        self.frame_rate = frame_rate
+        self.scale = scale
+
+        self.frames = []
+        self.flipped_cache = {}
+        self.animations = {}
+        self.current_animation = None
+        self.current_frame_index = 0
+        self.timer = 0
+
+        # New playback control variables
+        self.playing = True
+        self.loop = True
+        self.image = None
+
+        # play_once(then=, on_finish=) and on_frame()
+        self._then = None              # animation to play when a one-off ends
+        self._on_finish = None         # function to run when a one-off ends
+        self._once = False             # True while a play_once animation runs
+        self._frame_functions = {}     # {(name, frame_number): [functions]}
+        self._frame_shown = False      # has on_frame run for the current frame?
+
+        if from_sheet:
+            self._load_from_sheet(source, tile_width, tile_height, rows, cols)
+        else:
+            self._load_from_files(source)
+
+    # -----------------------------
+    # Loading methods
+    # -----------------------------
+    def _load_from_files(self, file_list):
+        """Load individual frame images (filenames or ready-made Surfaces)."""
+        for item in file_list:
+            if isinstance(item, pg.Surface):
+                img = item
+            else:
+                img = _convert_alpha(pg.image.load(item))
+            if self.scale != 1:
+                w, h = img.get_size()
+                img = pg.transform.scale(img, (int(w * self.scale), int(h * self.scale)))
+            self.frames.append(img)
+
+        self.sheet_cols = None   # no sprite sheet: frames are numbered 0, 1, 2...
+        self.animations["default"] = {"frames": list(range(len(self.frames))),
+                                      "invert": (False, False)}
+        self.current_animation = "default"
+
+    def _load_from_sheet(self, filename, tile_width, tile_height, rows, cols):
+        """Slice up the sprite sheet into frames."""
+        sheet = _convert_alpha(pg.image.load(filename))
+        for row in range(rows):
+            for col in range(cols):
+                x, y = col * tile_width, row * tile_height
+                frame = sheet.subsurface(pg.Rect(x, y, tile_width, tile_height))
+                if self.scale != 1:
+                    frame = pg.transform.scale(
+                        frame, (int(tile_width * self.scale), int(tile_height * self.scale))
+                    )
+                self.frames.append(frame)
+
+        self.sheet_cols = cols
+        self.animations["default"] = {"frames": list(range(len(self.frames))),
+                                      "invert": (False, False)}
+        self.current_animation = "default"
+
+    # -----------------------------
+    # Animation controls
+    # -----------------------------
+    def add_animation(self, name, frames, invert=(False, False), frame_rate=None):
+        """
+        Define an animation sequence and optional flipping.
+        frames: a list of (row, col) positions on a sprite sheet,
+                or a list of frame numbers, e.g. [0, 1, 2]
+        invert: (flip_x, flip_y)
+        frame_rate: frames per second for THIS animation (e.g. run faster
+                than walk). None = use the Animator's frame_rate.
+        """
+        indices = []
+        for f in frames:
+            if isinstance(f, int):
+                index = f
+            else:
+                row, col = f
+                if self.sheet_cols is None:
+                    raise ValueError("(row, col) frames need a sprite sheet; "
+                                     "use frame numbers like [0, 1, 2] instead")
+                index = row * self.sheet_cols + col
+            if 0 <= index < len(self.frames):
+                indices.append(index)
+        self.animations[name] = {"frames": indices, "invert": invert,
+                                 "frame_rate": frame_rate}
+
+    def play(self, name, reset=False):
+        """
+        Switch to a different animation by name.
+        If reset is True, restart from frame 0.
+        If reset is False and the requested animation is already current,
+          do NOT reset the frame index (important for held-keys).
+        """
+        if name not in self.animations:
+            return
+
+        # if switching to a new animation, always reset to start
+        if name != self.current_animation:
+            self.current_animation = name
+            self.current_frame_index = 0
+            self.timer = 0
+            # Switching animation always plays it looping
+            # (play_once() turns looping off again straight after)
+            self.playing = True
+            self.loop = True
+            # A different animation cancels a one-off's then= / on_finish=
+            # (e.g. the player is hit in the middle of an attack)
+            self._once = False
+            self._then = None
+            self._on_finish = None
+            self._frame_shown = False
+        else:
+            # same animation requested; only reset if caller asked for it
+            if reset:
+                self.current_frame_index = 0
+                self.timer = 0
+                self._frame_shown = False
+
+    def play_once(self, name, then=None, on_finish=None):
+        """
+        Play the named animation once (non-looping) from the start.
+        Useful for attacks/jumps triggered by single KEYDOWN events.
+
+        then      - the animation to play (looping) when it ends, e.g. "idle".
+                    None = stop on the last frame (the v1.0 way).
+        on_finish - a function (no arguments) to run when it ends.
+
+            animator.play_once("attack", then="idle")
+            animator.play_once("die", on_finish=game_over)
+        """
+        if name not in self.animations:
+            return
+        self.play(name, reset=True)
+        self.start(loop=False)
+        self._once = True
+        self._then = then
+        self._on_finish = on_finish
+
+    @property
+    def busy(self):
+        """True while a play_once() animation is still playing."""
+        return self._once and self.playing
+
+    def on_frame(self, name, frame_number, function):
+        """
+        Run function (no arguments) every time a frame of an animation is shown.
+
+        frame_number counts the frames IN THAT ANIMATION, starting at 0
+        (not the (row, col) on the sprite sheet).
+
+            animator.on_frame("walk", 1, step_sound.play)    # footsteps
+            animator.on_frame("attack", 2, hit_enemies)      # the hit frame
+        """
+        self._frame_functions.setdefault((name, frame_number), []).append(function)
+
+    def _frame_reached(self):
+        """Run the on_frame functions for the frame that is now showing."""
+        self._frame_shown = True
+        for function in self._frame_functions.get(
+                (self.current_animation, self.current_frame_index), []):
+            function()
+
+    def _one_off_ended(self):
+        """A play_once animation reached its end: run then= / on_finish=."""
+        then, on_finish = self._then, self._on_finish
+        self._once = False
+        self._then = None
+        self._on_finish = None
+        if then is not None:
+            self.play(then, reset=True)
+            self.start(loop=True)
+        if on_finish is not None:
+            on_finish()
+
+    def start(self, loop=True):
+        """Begin playing the current animation."""
+        self.playing = True
+        self.loop = loop
+        self.current_frame_index = 0
+        self.timer = 0
+        self._frame_shown = False
+
+    def stop(self):
+        """Stop animation playback."""
+        self.playing = False
+
+    def update(self, tick, flip_x=False, flip_y=False):
+        """
+        Advance the animation and return the current frame surface.
+        tick: time since last frame (e.g. from clock.tick(FPS))
+        flip_x/flip_y: temporary real-time flipping override
+        """
+        if not self.current_animation:
+            return None
+
+        anim = self.animations[self.current_animation]
+        frame_list = anim["frames"]
+
+        if self.playing:
+            if not self._frame_shown and self._frame_functions:
+                self._frame_reached()            # the first frame of an animation
+            # Timer counts whole milliseconds (decimals of seconds add up
+            # with tiny rounding errors)
+            self.timer += tick
+            frame_time = 1000 / (anim.get("frame_rate") or self.frame_rate)
+            # Keep the leftover time so the speed matches frame_rate exactly
+            while self.playing and self.timer >= frame_time:
+                self.timer -= frame_time
+                self.current_frame_index += 1
+
+                # Handle looping or stopping at the end
+                if self.current_frame_index >= len(frame_list):
+                    if self.loop:
+                        self.current_frame_index = 0
+                    else:
+                        self.current_frame_index = len(frame_list) - 1
+                        self.playing = False
+                        if self._once:
+                            self._one_off_ended()
+                            # then= (or on_finish) may have switched animation
+                            anim = self.animations[self.current_animation]
+                            frame_list = anim["frames"]
+                            frame_time = 1000 / (anim.get("frame_rate") or self.frame_rate)
+                            if self.playing and not self._frame_shown and self._frame_functions:
+                                self._frame_reached()
+                        continue
+                # Run on_frame functions for every frame passed - even if
+                # a big tick jumps over a frame, its function still runs
+                if self._frame_functions:
+                    self._frame_reached()
+
+        frame_index = frame_list[self.current_frame_index]
+        invert_x, invert_y = anim["invert"]
+        total_flip_x = invert_x ^ flip_x
+        total_flip_y = invert_y ^ flip_y
+
+        key = (frame_index, total_flip_x, total_flip_y)
+        if key not in self.flipped_cache:
+            frame = self.frames[frame_index]
+            if total_flip_x or total_flip_y:
+                frame = pg.transform.flip(frame, total_flip_x, total_flip_y)
+            self.flipped_cache[key] = frame
+
+        self.image = self.flipped_cache[key]
+        return self.image
+
+    def reset(self):
+        """Restart the current animation."""
+        self.current_frame_index = 0
+        self.timer = 0
+        self._frame_shown = False
+
+
+
+# ================================
+# Tile Classes (made by TiledMap)
+# ================================
+
+class Tile(pg.sprite.Sprite):
+    """One still map tile. TiledMap makes these for you."""
+
+    def __init__(self, pos, image):
+        super().__init__()
+        self.image = image
+        self.rect = self.image.get_rect(topleft=pos)
+
+    def update(self, tick):
+        pass    # still tiles don't change
+
+    def draw(self, screen, camera=None):
+        """Draw the tile. Pass the camera if the world scrolls."""
+        r = camera.apply(self.rect) if camera else self.rect
+        screen.blit(self.image, r)
+
+
+class AnimatedTile(Tile):
+    """
+    A map tile that loops an Animator (water, torches, machinery...).
+    TiledMap makes these for tiles animated in Tiled.
+    """
+
+    def __init__(self, pos, animator, default_animation="default"):
+        self.animator = animator
+        self.animator.play(default_animation)
+        self.animator.start(loop=True)
+        super().__init__(pos, self.animator.update(0))
+
+    def update(self, tick):
+        self.image = self.animator.update(tick)
+
+
+# ================================
+# TiledMap Class
+# ================================
+
+class TiledMap:
+    """
+    Loads a map made in Tiled (a .tmx file). Needs: pip install pytmx
+
+    Tile layers are sorted into three depths by their layer name in Tiled:
+        map.background   any other name     - always behind the sprites
+        map.midground    name has "midground" (or the layer property
+                         y_sort = true)     - in front of or behind sprites,
+                                              by height, with World(y_sort=True)
+        map.foreground   name has "foreground" - always in front of sprites
+    Custom tile properties typed in Tiled (e.g. water = true):
+        level.tile_properties_at(player.rect.midbottom)   # {"water": True, ...}
+        level.tile_property_at((x, y), "speed", 1)
+    Object layers are sorted into:
+        map.spawn_points      {"player_spawn": (x, y)}  - name contains "spawn"
+        map.collision_objects [{"rect": Rect, "properties": {...}}] - class "collision"
+        map.triggers          [{"rect", "name", "properties"}] - class "trigger"
+        map.paths             [{"points", "name", "properties"}] - polygons / polylines
+        map.custom_objects    everything else
+    """
+
+    def __init__(self, filename):
+        # Imported here so the rest of the library works without pytmx
+        from pytmx.util_pygame import load_pygame
+        self._object_classes = self._read_object_classes(filename)
+        self.tmx = load_pygame(filename)
+
+        self.tilewidth = self.tmx.tilewidth
+        self.tileheight = self.tmx.tileheight
+
+        self.width = self.tmx.width * self.tmx.tilewidth
+        self.height = self.tmx.height * self.tmx.tileheight
+        self.objects = list(self.tmx.objects)
+
+        # Things found in object layers (filled in by _load_object_layers)
+        self.spawn_points = {}
+        self.collision_objects = []
+        self.triggers = []
+        self.paths = []
+        self.custom_objects = []
+
+        # Layer groups
+        self.background = pg.sprite.Group()
+        self.midground = pg.sprite.Group()
+        self.foreground = pg.sprite.Group()
+        self._load_tile_layers()
+        self._load_object_layers()
+
+    # --------------------------------------------------------------
+    @staticmethod
+    def _read_object_classes(filename):
+        """
+        Read each object's "class" straight from the .tmx file, because
+        some pytmx versions don't load it.
+        """
+        import xml.etree.ElementTree as ET
+        classes = {}
+        for element in ET.parse(filename).getroot().iter("object"):
+            if element.get("class"):
+                classes[int(element.get("id"))] = element.get("class")
+            if element.find("polygon") is not None:     # closed shape -> looping path
+                classes.setdefault("_closed", set()).add(int(element.get("id")))
+        return classes
+
+    def get_objects(self):
+        return list(self.tmx.objects)
+
+    def get_path(self, name):
+        """Return a Path drawn in Tiled, found by its name (see the Path class)."""
+        for path in self.paths:
+            if path["name"] == name:
+                return Path.from_tiled(path)
+        names = ", ".join(p["name"] or "(no name)" for p in self.paths) or "none"
+        raise ValueError(f"No path called '{name}' in the map. Paths found: {names}")
+
+    def objects_of_type(self, obj_type):
+        """Every custom object with this Class / type, e.g. "enemy"."""
+        return [o for o in self.custom_objects if o["type"] == obj_type.lower()]
+
+    def rects_of_type(self, obj_type):
+        """The rectangles of every object with this Class, e.g. "platform" or "ladder"."""
+        return [o["rect"] for o in self.objects_of_type(obj_type)]
+
+    # pytmx adds these to every tile's properties - students only want
+    # what they typed in Tiled
+    _PYTMX_TILE_KEYS = ("id", "width", "height", "frames", "colliders")
+
+    def tile_properties_at(self, pos_or_x, y=None):
+        """
+        The custom properties typed in Tiled for the tile at a world position,
+        as a dict. Every tile layer is checked; if two layers set the same
+        property, the top layer wins. No tile (or no properties) gives {},
+        so .get() never crashes:
+            props = level.tile_properties_at(player.rect.midbottom)
+            if props.get("water"):
+                speed = SPEED * props.get("speed", 0.5)
+        Hidden layers count too, so a hidden "logic" layer can mark areas.
+        Note: this reads the map as it was made in Tiled, not tiles your
+        game has added or moved since.
+        """
+        if y is None:
+            x, y = pos_or_x
+        else:
+            x = pos_or_x
+        column, row = int(x // self.tilewidth), int(y // self.tileheight)
+        found = {}
+        if not (0 <= column < self.tmx.width and 0 <= row < self.tmx.height):
+            return found                     # outside the map
+        for layer in self.tmx.layers:        # bottom layer first, so the top one wins
+            if not hasattr(layer, "data"):   # object / image layers have no tiles
+                continue
+            gid = layer.data[row][column]
+            if not gid:
+                continue
+            props = self.tmx.get_tile_properties_by_gid(gid) or {}
+            for name, value in props.items():
+                if name not in self._PYTMX_TILE_KEYS:
+                    found[name] = value
+        return found
+
+    def tile_property_at(self, pos, name, default=None):
+        """One tile property at a world position, or default if it isn't there."""
+        return self.tile_properties_at(pos).get(name, default)
+
+    def _group_for_layer(self, layer):
+        """Which depth group a Tiled tile layer goes into (see the class docstring)."""
+        name = layer.name.lower()
+        y_sort = getattr(layer, "properties", {}).get("y_sort")
+        if y_sort is True or str(y_sort).lower() == "true" or "midground" in name:
+            return self.midground
+        if "foreground" in name:
+            return self.foreground
+        return self.background
+
+    @staticmethod
+    def _set_stack_bottoms(tiles_by_cell, tileheight):
+        """
+        Tall things made of tiles stacked in a column (a tree top on its trunk)
+        must sort together, or the player would walk between the top and the
+        trunk. Each tile gets sort_y = the bottom of the lowest tile in its stack.
+        """
+        for (column, row), tile in tiles_by_cell.items():
+            bottom_row = row
+            while (column, bottom_row + 1) in tiles_by_cell:
+                bottom_row += 1
+            tile.sort_y = (bottom_row + 1) * tileheight
+
+    def _load_tile_layers(self):
+        for layer_number, layer in enumerate(self.tmx.visible_layers):
+            if hasattr(layer, "tiles"):
+                group = self._group_for_layer(layer)
+                midground_cells = {}             # (column, row): tile
+
+                for x, y, surf in layer.tiles():
+                    gid = layer.data[y][x]
+
+                    # IMPORTANT: use pytmx API, never self.tmx.tiles
+                    tile_props = self.tmx.get_tile_properties_by_gid(gid) or {}
+
+                    world_pos = (x * self.tilewidth, y * self.tileheight)
+
+                    # ----------------------------
+                    # Animated tile detection
+                    # ----------------------------
+                    # pytmx stores Tiled animations under "frames"
+                    anim = tile_props.get("frames")
+                    if anim:
+
+                        frames = []
+                        durations = []
+
+                        for f in anim:
+                            frame_img = self.tmx.get_tile_image_by_gid(f.gid)
+                            frames.append(frame_img)
+                            durations.append(f.duration)
+
+                        avg_duration = sum(durations) / len(durations)  # ms
+                        frame_rate = 1000 / avg_duration                 # fps
+
+                        animator = Animator(frames, from_sheet=False, frame_rate=frame_rate)
+                        anim_tile = AnimatedTile(world_pos, animator)
+                        anim_tile.map_layer = layer_number     # World draws layer by layer
+                        group.add(anim_tile)
+                        midground_cells[(x, y)] = anim_tile
+                        continue
+
+                    # ----------------------------
+                    # Static tile
+                    # ----------------------------
+                    tile = Tile(world_pos, surf)
+                    tile.map_layer = layer_number
+                    group.add(tile)
+                    midground_cells[(x, y)] = tile
+
+                if group is self.midground:
+                    self._set_stack_bottoms(midground_cells, self.tileheight)
+
+    def _load_object_layers(self):
+        """Loads all objects from Tiled object layers."""
+        for obj in self.objects:
+
+            ox, oy = obj.x, obj.y
+            ow, oh = getattr(obj, "width", 0), getattr(obj, "height", 0)
+            props = dict(obj.properties)
+
+            name = obj.name or ""
+            # Older Tiled saves "type", Tiled 1.9+ saves "class"
+            obj_type = getattr(obj, "type", None) or self._object_classes.get(obj.id, "")
+            obj_type = str(obj_type).lower()
+            shape = getattr(obj, "shape", None)
+
+            # ------------- Spawn Points -------------
+            if "spawn" in name.lower():
+                self.spawn_points[name] = (ox, oy)
+                continue
+
+            # ------------- Collision -------------
+            if obj_type == "collision":
+                rect = pg.Rect(ox, oy, ow, oh)
+                self.collision_objects.append({"rect": rect, "properties": props})
+                continue
+
+            # ------------- Trigger Zones -------------
+            if obj_type == "trigger":
+                rect = pg.Rect(ox, oy, ow, oh)
+                self.triggers.append({
+                    "rect": rect,
+                    "name": name,
+                    "properties": props
+                })
+                continue
+
+            # ------------- Ellipse -------------
+            if shape == "ellipse" or getattr(obj, "ellipse", False):
+                self.collision_objects.append({
+                    "ellipse": (ox, oy, ow, oh),
+                    "properties": props
+                })
+                continue
+
+            # ------------- Polygon / Polyline -------------
+            # pytmx gives these a .points list (not a .shape), and the
+            # points are already in map coordinates
+            if shape in ("polygon", "polyline") or hasattr(obj, "points"):
+                points = [(p.x, p.y) for p in obj.points]
+                self.paths.append({
+                    "points": points,
+                    "name": name,
+                    "type": obj_type,
+                    "closed": obj.id in self._object_classes.get("_closed", set()),
+                    "properties": props
+                })
+                continue
+
+            # ------------- Generic Custom Object -------------
+            self.custom_objects.append({
+                "rect": pg.Rect(ox, oy, ow, oh),
+                "name": name,
+                "type": obj_type,
+                "x": ox,
+                "y": oy,
+                "width": ow,
+                "height": oh,
+                "properties": props
+            })
+
+
+
+
+
+# ================================
+# SpriteObject Class
+# ================================
+
+# Compass directions for SpriteObject angles: 0 = up, then clockwise
+COMPASS = {"up": 0, "right": 90, "down": 180, "left": 270}
+
+
+def _centre_of(thing):
+    """The centre of a sprite, a Rect, or an (x, y) position, as a Vector2."""
+    if isinstance(thing, pg.Rect):
+        return pg.Vector2(thing.center)
+    if hasattr(thing, "rect"):
+        return pg.Vector2(thing.rect.center)
+    return pg.Vector2(thing)
+
+
+class SpriteObject(pg.sprite.Sprite):
+    """
+    A simple game object (player, enemy, coin...) with an image or Animator.
+
+    Parameters:
+        x, y          - position (top-left)
+        width, height - optional size; the image is scaled to fit
+        image         - a Surface or an image filename, e.g. "player.png"
+        animator      - an Animator (used instead of image)
+        bg            - colour of the plain box used when there is no image
+        image_faces   - which way the picture is drawn: "up" (default),
+                        "right", "down" or "left". Used by angle / point_at.
+        smooth_move   - True: move() keeps fractions of a pixel, so slow
+                        speeds like move(0.4, 0) still move (see move()).
+
+    Example:
+        player = SpriteObject(100, 100, image="player.png")
+        player.move(5, 0)
+        if player.collides_with(enemy): ...
+
+    Turning (only the picture turns - the hitbox rect stays the same):
+        angle is a compass direction in degrees: 0 = up, 90 = right,
+        180 = down, 270 = left (clockwise, like a compass).
+        turret.point_at(pg.mouse.get_pos())   # or point_at(enemy)
+        turret.turn(90 * tick / 1000)         # 90 degrees a second, clockwise
+        turret.angle = 180                    # face down
+
+    Handy maths:
+        enemy.distance_to(player)    # pixels between the centres
+        enemy.direction_to(player)   # a Vector2 of length 1 pointing at it
+    """
+
+    def __init__(self, x, y, width=None, height=None, image=None, animator=None,
+                 bg=(255, 0, 255), image_faces="up", smooth_move=False):
+        super().__init__()
+        self.animator = animator
+
+        if isinstance(image, str):
+            image = _convert_alpha(pg.image.load(image))
+        if animator:
+            image = animator.frames[0]
+        if image is None:
+            image = pg.Surface((width or 32, height or 32))
+            image.fill(bg)
+
+        self.size = (width, height) if width and height else None
+        self.image = self._fit(image)
+        self.rect = self.image.get_rect(topleft=(x, y))
+        self.visible = True
+        self.flip_x = False          # True = face the other way (mirror left / right)
+        self.flip_y = False
+        self._flash_until = 0        # see flash() and blink()
+        self._blink_until = 0
+        if image_faces not in COMPASS:
+            raise ValueError(f'image_faces should be "up", "right", "down" or "left", '
+                             f'not {image_faces!r}')
+        self.image_faces = image_faces
+        # The picture starts unturned: angle = the way the picture already faces
+        self.angle = COMPASS[image_faces]
+        self.smooth_move = smooth_move
+        self._exact = None           # smooth_move: the position with fractions
+        self._exact_at = None        # where the rect was after the last smooth move
+        self._turned = {}            # cache of turned pictures
+        self._masks = {}             # cache of masks for pixel=True
+
+    def _fit(self, image):
+        """Scale the image to the size given when the sprite was made."""
+        if self.size and image.get_size() != self.size:
+            return pg.transform.scale(image, self.size)
+        return image
+
+    def move(self, dx, dy):
+        """
+        Move the sprite by dx, dy pixels.
+
+        A rect can only stand on whole pixels, so move(0.4, 0) normally moves
+        nothing at all. With smooth_move=True the fractions are kept and add
+        up: move(0.4, 0) five times moves 2 pixels.
+        """
+        if not self.smooth_move:
+            self.rect.x += dx
+            self.rect.y += dy
+            return
+        # If something else moved the rect (e.g. rect.x = 100, or a wall push),
+        # start again from where the rect really is
+        if self._exact is None or self._exact_at != self.rect.topleft:
+            self._exact = pg.Vector2(self.rect.topleft)
+        self._exact += (dx, dy)
+        self.rect.topleft = (round(self._exact.x), round(self._exact.y))
+        self._exact_at = self.rect.topleft
+
+    def collides_with(self, other, pixel=False):
+        """
+        True if this sprite touches another (anything with a .rect).
+
+        pixel=True: only count the pixels that are really drawn (not the
+        see-through corners of the picture). Slower, but exact - good for
+        round coins, spikes or turned sprites.
+        """
+        if not pixel:
+            return self.rect.colliderect(other.rect)
+        my_mask, my_pos = self._mask_and_pos()
+        other_mask, other_pos = _mask_and_pos_of(other)
+        offset = (other_pos[0] - my_pos[0], other_pos[1] - my_pos[1])
+        return my_mask.overlap(other_mask, offset) is not None
+
+    def collides_with_any(self, things, pixel=False):
+        """
+        The first thing in things (a list or Group) that this sprite touches,
+        or None.
+            coin = player.collides_with_any(coins)
+            if coin: coins.remove(coin)
+        """
+        for thing in things:
+            if thing is not self and self.collides_with(thing, pixel=pixel):
+                return thing
+        return None
+
+    # ---------- distance, direction and turning ----------
+    def distance_to(self, target):
+        """Pixels from this sprite's centre to target (a sprite, Rect or (x, y))."""
+        return (_centre_of(target) - pg.Vector2(self.rect.center)).length()
+
+    def direction_to(self, target):
+        """
+        A Vector2 of length 1 pointing at target (a sprite, Rect or (x, y)).
+        Multiply it by a speed to move towards the target:
+            step = enemy.direction_to(player) * SPEED * tick / 1000
+            enemy.move(step.x, step.y)
+        Gives (0, 0) when both are on the same spot.
+        """
+        gap = _centre_of(target) - pg.Vector2(self.rect.center)
+        if gap.length() == 0:
+            return pg.Vector2(0, 0)
+        return gap.normalize()
+
+    def point_at(self, target):
+        """Turn the picture to face target (a sprite, Rect or (x, y))."""
+        gap = _centre_of(target) - pg.Vector2(self.rect.center)
+        if gap.length() == 0:
+            return                                   # already there: keep the angle
+        # as_polar measures from "right"; add 90 so 0 = up (compass style)
+        self.angle = (gap.as_polar()[1] + 90) % 360
+
+    def turn(self, degrees):
+        """Turn clockwise by degrees (negative = anticlockwise)."""
+        self.angle = (self.angle + degrees) % 360
+
+    def _drawn_image(self):
+        """The picture as it is drawn: self.image, turned by angle."""
+        turn = (self.angle - COMPASS[self.image_faces]) % 360
+        if round(turn) % 360 == 0:
+            return self.image                        # not turned (the v1.0 way)
+        key = (id(self.image), round(turn))
+        cached = self._turned.get(key)
+        if cached is None or cached[0] is not self.image:
+            if len(self._turned) > 120:              # don't keep too many
+                self._turned.clear()
+            # pygame turns anticlockwise, compass angles go clockwise
+            cached = (self.image, pg.transform.rotate(self.image, -round(turn)))
+            self._turned[key] = cached
+        return cached[1]
+
+    def _mask_and_pos(self):
+        """The mask of the drawn picture and its top-left (for pixel=True)."""
+        image = self._drawn_image()
+        if image is self.image:
+            pos = self.rect.topleft
+        else:
+            pos = image.get_rect(center=self.rect.center).topleft
+        cached = self._masks.get(id(image))
+        if cached is None or cached[0] is not image:
+            if len(self._masks) > 120:
+                self._masks.clear()
+            cached = (image, pg.mask.from_surface(image))
+            self._masks[id(image)] = cached
+        return cached[1], pos
+
+    def handle_event(self, event, offset=(0, 0)):
+        pass
+
+    def update(self, screen, tick):
+        """Play the animation (if there is an Animator)."""
+        if self.animator:
+            self.image = self._fit(self.animator.update(tick, self.flip_x, self.flip_y))
+
+    def draw(self, screen, camera=None):
+        """Draw the sprite. Pass the camera if the world scrolls."""
+        if not self.visible:
+            return
+        now = pg.time.get_ticks()
+        if now < self._blink_until and (now // self._blink_rate) % 2:
+            return                                   # blinking: skip every other moment
+        r = camera.apply(self.rect) if camera else self.rect
+        image = self._drawn_image()
+        if image is not self.image:
+            # Turned: the picture is bigger, so centre it on the hitbox
+            r = image.get_rect(center=r.center)
+        if now < self._flash_until:
+            # Draw the sprite's shape filled with one colour
+            mask = pg.mask.from_surface(image)
+            screen.blit(mask.to_surface(setcolor=self._flash_color, unsetcolor=(0, 0, 0, 0)), r)
+        else:
+            screen.blit(image, r)
+
+
+def _mask_and_pos_of(thing):
+    """A mask and top-left for anything: a SpriteObject, a sprite, or a rect."""
+    if hasattr(thing, "_mask_and_pos"):
+        return thing._mask_and_pos()
+    rect = _rect_of(thing)
+    image = getattr(thing, "image", None)
+    if isinstance(image, pg.Surface):
+        return pg.mask.from_surface(image), rect.topleft
+    mask = pg.mask.Mask(rect.size, fill=True)   # no picture: the whole rect is solid
+    return mask, rect.topleft
+
+
+# ================================
+# World Class
+# ================================
+
+class World:
+    """
+    Puts a TiledMap, a Camera and your sprites together and draws them in
+    the right order: background tiles, midground tiles, sprites, then
+    foreground tiles.
+
+    Parameters:
+        tiled_map - a TiledMap
+        camera    - a Camera (if you use a ZoomCamera, give World the base Camera)
+        chunks    - True (default): big maps stay fast (see below).
+                    False: check every tile every frame (the v1.0 way)
+        y_sort    - True: sprites and midground tiles are drawn lowest-last,
+                    by the bottom of their rect, so whatever is lower on the
+                    screen is in front. Walk behind a tree, then in front of it.
+                    False (default): sprites in the order they were added.
+
+    Example:
+        world = World(TiledMap("level1.tmx"), camera)
+        world.add_sprite(player)
+        world.update(tick)        # in update(tick)
+        world.draw(screen)        # in draw_game()
+
+    Why big maps stay fast: the tiles are sorted into squares ("chunks") of
+    CHUNK_SIZE pixels when the map loads. Each frame only the chunks on the
+    screen are looked at, and only animated tiles are updated - so a huge
+    map costs about the same as a small one.
+    If you add or remove tiles in map.background / map.foreground the chunks
+    are rebuilt by themselves. If you MOVE a tile (or swap tiles in and out
+    in the same frame), call world.refresh().
+    With Debug on (F1), the frame rate and the number of tiles drawn show
+    in the top-left corner.
+    """
+
+    CHUNK_SIZE = 256        # pixels
+
+    def __init__(self, tiled_map, camera, chunks=True, y_sort=False):
+        self.map = tiled_map
+        self.camera = camera
+        self.sprites = pg.sprite.Group()
+        self.chunks = chunks
+        self.y_sort = y_sort
+        self._caches = {}           # one per tile group (background / foreground)
+        self.tiles_drawn = 0        # shown in the F1 debug view
+        self._frame_times = []
+
+    def refresh(self):
+        """Re-sort the tiles into chunks (only needed after moving tiles)."""
+        self._caches = {}
+
+    def _cache(self, tiles):
+        """
+        The tiles of one group, sorted for fast drawing:
+            "layers"   - for each map layer (in drawing order): {chunk: [tiles]}
+            "changing" - tiles that need update() (animated / your own kinds)
+        Built again whenever tiles are added or removed.
+        """
+        cache = self._caches.get(id(tiles))
+        if cache is not None and cache["count"] == len(tiles):
+            return cache
+        size = self.CHUNK_SIZE
+        layers, changing = [], []
+        current_key, current = object(), None
+        biggest = [0, 0]
+        for tile in tiles:                       # the same order as the old way
+            key = getattr(tile, "map_layer", None)
+            if key != current_key:               # a new layer starts
+                current_key, current = key, {}
+                layers.append(current)
+            r = tile.rect
+            current.setdefault((r.x // size, r.y // size), []).append(tile)
+            biggest[0] = max(biggest[0], r.width)
+            biggest[1] = max(biggest[1], r.height)
+            if type(tile).update is not Tile.update:     # still tiles never change
+                changing.append(tile)
+        cache = {"count": len(tiles), "layers": layers, "changing": changing,
+                 "biggest": biggest}
+        self._caches[id(tiles)] = cache
+        return cache
+
+    def add_sprite(self, *sprites):
+        """Add one or more sprites (player, enemies...)."""
+        self.sprites.add(*sprites)
+
+    def update(self, screen, tick):
+        """Animate tiles and sprites."""
+        for tiles in self._tile_groups():
+            if self.chunks:
+                for tile in self._cache(tiles)["changing"]:   # still tiles are skipped
+                    tile.update(tick)
+            else:
+                for tile in tiles:
+                    tile.update(tick)
+        for sprite in self.sprites:
+            sprite.update(screen, tick)
+
+    def _tile_groups(self):
+        """The map's tile groups (older maps made in code may have no midground)."""
+        groups = [self.map.background]
+        if hasattr(self.map, "midground"):
+            groups.append(self.map.midground)
+        groups.append(self.map.foreground)
+        return groups
+
+    def _draw_tiles(self, screen, tiles, view):
+        for tile in self._tiles_on_screen(tiles, view):
+            tile.draw(screen, self.camera)
+            self.tiles_drawn += 1
+
+    def _tiles_on_screen(self, tiles, view):
+        """The tiles of one group that touch the view, in drawing order."""
+        found = []
+        if not self.chunks:
+            for tile in tiles:
+                if tile.rect.colliderect(view):      # skip tiles off screen
+                    found.append(tile)
+            return found
+        cache = self._cache(tiles)
+        size = self.CHUNK_SIZE
+        # Tiles are filed under their top-left corner, so look a little further
+        # up and left in case a big tile hangs onto the screen
+        first_x = (view.left - cache["biggest"][0]) // size
+        first_y = (view.top - cache["biggest"][1]) // size
+        last_x, last_y = view.right // size, view.bottom // size
+        for layer in cache["layers"]:
+            for cy in range(first_y, last_y + 1):
+                for cx in range(first_x, last_x + 1):
+                    for tile in layer.get((cx, cy), ()):
+                        if tile not in tiles:        # removed: sort again next frame
+                            cache["count"] = -1
+                            continue
+                        if tile.rect.colliderect(view):
+                            found.append(tile)
+        return found
+
+    def _draw_debug(self, screen):
+        """F1: frame rate and tiles drawn, so lag can be seen, not guessed."""
+        now = pg.time.get_ticks()
+        self._frame_times = [t for t in self._frame_times if now - t < 1000] + [now]
+        text = f"FPS {len(self._frame_times)}   tiles drawn {self.tiles_drawn}"
+        surface = get_font(None, 22).render(text, True, (255, 255, 0))
+        back = pg.Rect(4, 4, surface.get_width() + 8, surface.get_height() + 4)
+        pg.draw.rect(screen, (0, 0, 0), back)
+        screen.blit(surface, (8, 6))
+
+    @staticmethod
+    def _depth(thing):
+        """
+        How far down the screen a thing stands (bigger = nearer = in front).
+        Midground tiles in a stack all use the bottom of the stack (sort_y).
+        """
+        return getattr(thing, "sort_y", thing.rect.bottom)
+
+    def _draw_sprite(self, screen, sprite):
+        if hasattr(sprite, "draw"):
+            sprite.draw(screen, self.camera)
+        else:
+            screen.blit(sprite.image, self.camera.apply(sprite.rect))
+
+    def draw(self, screen):
+        """
+        Draw background tiles, then midground tiles and sprites, then
+        foreground tiles. With y_sort=True the midground tiles and sprites
+        are mixed together, lowest on the screen drawn last (in front).
+        """
+        # The part of the world that is on screen
+        view = pg.Rect(int(self.camera.offset.x), int(self.camera.offset.y),
+                       screen.get_width() + 1, screen.get_height() + 1)
+        midground = getattr(self.map, "midground", ())
+
+        self.tiles_drawn = 0
+        self._draw_tiles(screen, self.map.background, view)
+        if self.y_sort:
+            tiles = self._tiles_on_screen(midground, view) if midground else []
+            self.tiles_drawn += len(tiles)
+            # Tiles first, so a sprite standing level with a tile is drawn in front
+            things = sorted(tiles + list(self.sprites), key=self._depth)
+            for thing in things:
+                if isinstance(thing, Tile):
+                    thing.draw(screen, self.camera)
+                else:
+                    self._draw_sprite(screen, thing)
+        else:
+            if midground:
+                self._draw_tiles(screen, midground, view)
+            for sprite in self.sprites:
+                self._draw_sprite(screen, sprite)
+        self._draw_tiles(screen, self.map.foreground, view)
+        if Debug.on:
+            if self.y_sort:
+                self._draw_depth_lines(screen, midground, view)
+            if hasattr(self.camera, "draw_debug"):
+                self.camera.draw_debug(screen)
+            self._draw_debug(screen)
+
+    def _draw_depth_lines(self, screen, midground, view):
+        """
+        F1 with y_sort: a line under each sprite and each midground stack at
+        the height used for sorting. Whatever's line is lower is drawn in front.
+        """
+        colour = (0, 255, 255)
+        stacks = {}
+        for tile in self._tiles_on_screen(midground, view) if midground else []:
+            stacks[(tile.rect.x, self._depth(tile))] = tile.rect.width
+        for (x, bottom), width in stacks.items():
+            start = self.camera.apply_pos((x, bottom - 1))
+            pg.draw.line(screen, colour, start, (start[0] + width - 1, start[1]), 2)
+        for sprite in self.sprites:
+            left = self.camera.apply_pos((sprite.rect.left, self._depth(sprite) - 1))
+            pg.draw.line(screen, (255, 255, 0), left, (left[0] + sprite.rect.width - 1, left[1]), 2)
+
+
+# ================================
+# Joystick Manager Class
+# ================================
+
+class JoystickManager:
+    """
+    Reads any game controller pygame can see (Xbox, PlayStation, Switch,
+    cheap USB pads, arcade sticks...).
+
+    Every controller numbers its buttons, axes and hats differently, so:
+      1. Turn on debug=True and press things to see pygame's numbers.
+      2. Give those numbers names with bind_button / bind_axis / bind_hat.
+      3. Read them with is_pressed("jump"), get_axis("move_x") etc.
+
+    Parameters:
+        index    - which controller to use (0 = first, 1 = second...)
+        deadzone - small stick movements below this are ignored (0.0 - 1.0)
+        debug    - if True, print every button / axis / hat change
+
+    Put pad.handle_event(event) in handle_inputs()
+    and pad.update(tick) at the start of update(tick).
+    """
+
+    def __init__(self, index=0, deadzone=0.15, debug=False):
+        self.index = index
+        self.deadzone = deadzone
+        self.debug = debug
+        self.joystick = None
+
+        # Names the student gives to pygame's numbers
+        self.button_binds = {}     # "jump"   -> 0
+        self.axis_binds = {}       # "move_x" -> (0, invert)
+        self.hat_binds = {}        # "dpad"   -> 0
+        self.commands = {}         # button number -> list of functions
+
+        # Buttons held this frame and last frame (for was_pressed)
+        self._held = set()
+        self._held_before = set()
+
+        self._font = None
+
+        if not pg.joystick.get_init():
+            pg.joystick.init()
+        self.connect_joystick()
+
+    # -----------------------------
+    # Connecting
+    # -----------------------------
+    def connect_joystick(self):
+        """Connect to the controller number self.index (if plugged in)."""
+        if pg.joystick.get_count() > self.index:
+            self.joystick = pg.joystick.Joystick(self.index)
+            self.joystick.init()
+            print("Connected:", self.joystick.get_name())
+        else:
+            self.joystick = None
+            print("No controller connected")
+
+    @property
+    def connected(self):
+        """True if a controller is plugged in."""
+        return self.joystick is not None
+
+    def _is_mine(self, event):
+        """True if this event came from our controller."""
+        if self.joystick is None:
+            return False
+        if hasattr(event, "instance_id"):
+            return event.instance_id == self.joystick.get_instance_id()
+        return True
+
+    # -----------------------------
+    # Game loop methods
+    # -----------------------------
+    def handle_event(self, event):
+        """Call this for every event in handle_inputs()."""
+        # Controller plugged in while the game is running
+        if event.type == pg.JOYDEVICEADDED:
+            if self.joystick is None:
+                self.connect_joystick()
+            return
+
+        # Controller unplugged
+        if event.type == pg.JOYDEVICEREMOVED:
+            if self.joystick is not None and \
+                    event.instance_id == self.joystick.get_instance_id():
+                self.joystick = None
+                self._held = set()
+                self._held_before = set()
+                print("Controller disconnected")
+            return
+
+        if not self._is_mine(event):
+            return
+
+        if self.debug:
+            self.debug_event(event)
+
+        # Run any command= functions linked to this button
+        if event.type == pg.JOYBUTTONDOWN:
+            for command in self.commands.get(event.button, []):
+                command()
+
+    def update(self, tick=None):
+        """Call this once per frame, at the start of update(tick)."""
+        self._held_before = self._held
+        self._held = set()
+        if self.joystick is None:
+            return
+        for number in range(self.joystick.get_numbuttons()):
+            if self.joystick.get_button(number):
+                self._held.add(number)
+
+    # -----------------------------
+    # Linking names to numbers
+    # -----------------------------
+    def bind_button(self, name, number, command=None):
+        """Give button `number` a name. Optional command runs when pressed."""
+        self.button_binds[name] = number
+        if command is not None:
+            self.commands.setdefault(number, []).append(command)
+
+    def bind_axis(self, name, number, invert=False):
+        """Give axis `number` a name. invert=True flips the direction."""
+        self.axis_binds[name] = (number, invert)
+
+    def bind_hat(self, name, number):
+        """Give hat (D-pad) `number` a name."""
+        self.hat_binds[name] = number
+
+    def _lookup(self, binds, name, kind):
+        """Turn a name into a number. Numbers are passed straight through."""
+        if isinstance(name, str):
+            if name not in binds:
+                raise ValueError(f"No {kind} called '{name}'. "
+                                 f"Use bind_{kind}('{name}', number) first.")
+            return binds[name]
+        return name
+
+    # -----------------------------
+    # Reading buttons
+    # -----------------------------
+    def get_button(self, button):
+        """True while the button is held. button can be a number or a name."""
+        number = self._lookup(self.button_binds, button, "button")
+        if self.joystick is None or not 0 <= number < self.joystick.get_numbuttons():
+            return False
+        return bool(self.joystick.get_button(number))
+
+    def is_pressed(self, button):
+        """True while the button is held down (same as get_button)."""
+        return self.get_button(button)
+
+    def was_pressed(self, button):
+        """True only on the frame the button was pressed (like KEYDOWN)."""
+        number = self._lookup(self.button_binds, button, "button")
+        return number in self._held and number not in self._held_before
+
+    def was_released(self, button):
+        """True only on the frame the button was let go (like KEYUP)."""
+        number = self._lookup(self.button_binds, button, "button")
+        return number not in self._held and number in self._held_before
+
+    # -----------------------------
+    # Reading sticks and D-pads
+    # -----------------------------
+    def get_axis(self, axis):
+        """
+        Stick / trigger position from -1.0 to 1.0, with the deadzone applied.
+        axis can be a number or a name.
+        """
+        if isinstance(axis, str):
+            number, invert = self._lookup(self.axis_binds, axis, "axis")
+        else:
+            number, invert = axis, False
+
+        if self.joystick is None or not 0 <= number < self.joystick.get_numaxes():
+            return 0
+
+        value = self.joystick.get_axis(number)
+
+        # Apply deadzone, then stretch the rest so it still goes smoothly 0 -> 1
+        if abs(value) < self.deadzone:
+            value = 0
+        else:
+            sign = 1 if value > 0 else -1
+            value = sign * (abs(value) - self.deadzone) / (1 - self.deadzone)
+            value = max(-1.0, min(1.0, value))
+
+        if invert:
+            value = -value
+        return value
+
+    def get_hat(self, hat):
+        """D-pad direction as (x, y), e.g. (-1, 0) = left. Number or name."""
+        number = self._lookup(self.hat_binds, hat, "hat")
+        if self.joystick is None or not 0 <= number < self.joystick.get_numhats():
+            return (0, 0)
+        return self.joystick.get_hat(number)
+
+    # -----------------------------
+    # Saving the student's controls
+    # -----------------------------
+    def save_bindings(self, filename):
+        """Save the bound names to a JSON file (commands are not saved)."""
+        import json
+        data = {
+            "buttons": self.button_binds,
+            "axes": {name: list(v) for name, v in self.axis_binds.items()},
+            "hats": self.hat_binds,
+        }
+        with open(filename, "w") as f:
+            json.dump(data, f, indent=2)
+
+    def load_bindings(self, filename):
+        """Load names saved with save_bindings."""
+        import json
+        with open(filename) as f:
+            data = json.load(f)
+        self.button_binds.update(data.get("buttons", {}))
+        for name, (number, invert) in data.get("axes", {}).items():
+            self.axis_binds[name] = (number, invert)
+        self.hat_binds.update(data.get("hats", {}))
+
+    # -----------------------------
+    # Debugging
+    # -----------------------------
+    def debug_event(self, event):
+        """Print what pygame reports, so you can find the numbers to bind."""
+        if event.type == pg.JOYBUTTONDOWN:
+            print(f"Button PRESSED: {event.button}")
+
+        elif event.type == pg.JOYBUTTONUP:
+            print(f"Button RELEASED: {event.button}")
+
+        elif event.type == pg.JOYAXISMOTION:
+            # Only print significant axis movement
+            if abs(event.value) > self.deadzone:
+                print(f"Axis {event.axis}: {event.value:.2f}")
+
+        elif event.type == pg.JOYHATMOTION:
+            print(f"Hat {event.hat}: {event.value}")
+
+    def draw_debug(self, screen, x=10, y=10):
+        """Draw a live panel showing every button, axis and hat."""
+        if self._font is None:
+            self._font = get_font(None, 22)
+        font = self._font
+        white = (255, 255, 255)
+
+        if self.joystick is None:
+            screen.blit(font.render("No controller connected", True, white), (x, y))
+            return
+
+        js = self.joystick
+        screen.blit(font.render(js.get_name(), True, white), (x, y))
+        y += 28
+
+        # Buttons: numbered circles, lit while held
+        screen.blit(font.render("Buttons", True, white), (x, y))
+        y += 20
+        for n in range(js.get_numbuttons()):
+            cx = x + 15 + (n % 8) * 36
+            cy = y + 15 + (n // 8) * 36
+            colour = (80, 220, 80) if js.get_button(n) else (70, 70, 70)
+            pg.draw.circle(screen, colour, (cx, cy), 14)
+            label = font.render(str(n), True, white)
+            screen.blit(label, label.get_rect(center=(cx, cy)))
+        y += ((js.get_numbuttons() + 7) // 8) * 36 + 10
+
+        # Axes: bars from -1 to 1
+        screen.blit(font.render("Axes", True, white), (x, y))
+        y += 20
+        for n in range(js.get_numaxes()):
+            value = js.get_axis(n)
+            screen.blit(font.render(f"{n}: {value:+.2f}", True, white), (x, y))
+            bar = pg.Rect(x + 80, y + 2, 160, 12)
+            pg.draw.rect(screen, (70, 70, 70), bar)
+            mid = bar.centerx
+            end = mid + int(value * bar.width / 2)
+            pg.draw.rect(screen, (80, 160, 255),
+                         pg.Rect(min(mid, end), bar.y, abs(end - mid) or 1, bar.height))
+            y += 20
+        y += 10
+
+        # Hats (D-pads)
+        screen.blit(font.render("Hats", True, white), (x, y))
+        y += 20
+        for n in range(js.get_numhats()):
+            screen.blit(font.render(f"{n}: {js.get_hat(n)}", True, white), (x, y))
+            y += 20
+
+
+# ================================
+# KeyboardInput Class
+# ================================
+
+class KeyboardInput:
+    """
+    Tells you if a key was just pressed, is being held, or was just let go.
+
+        keys = KeyboardInput()
+        keys.bind("jump", "space", "w")       # names for keys (several allowed)
+
+        keys.handle_event(event)              # in handle_inputs()
+        keys.update(tick)                     # at the START of update(tick)
+
+        keys.was_pressed("jump")   # True for ONE frame when pressed (jump, shoot once)
+        keys.is_pressed("jump")    # True EVERY frame while held (move, engine sound)
+        keys.was_released("jump")  # True for ONE frame when let go
+        keys.held_time("jump")     # milliseconds it has been held
+
+    You can also use key names ("space", "a", "left", "return") or pygame keys
+    (pg.K_SPACE) without binding them.
+    """
+
+    def __init__(self):
+        self.binds = {}
+        self._held = set()
+        self._pressed = set()        # pressed this frame
+        self._released = set()       # released this frame
+        self._new_pressed = set()    # collected by handle_event, used next update
+        self._new_released = set()
+        self._held_ms = {}
+
+    def bind(self, name, *keys):
+        """Give one or more keys a name, e.g. bind("left", "a", pg.K_LEFT)."""
+        self.binds[name] = [self._key_code(k) for k in keys]
+
+    @staticmethod
+    def _key_code(key):
+        if isinstance(key, str):
+            try:
+                return pg.key.key_code(key)
+            except ValueError:
+                raise ValueError(f"'{key}' is not a key name. Try names like "
+                                 f"'space', 'a', 'left', 'return'.") from None
+        return key
+
+    def _codes(self, key):
+        if isinstance(key, str) and key in self.binds:
+            return self.binds[key]
+        if isinstance(key, str) and key not in self.binds and len(key) > 1 \
+                and key.replace("_", "").isalpha():
+            try:
+                return [pg.key.key_code(key)]
+            except ValueError:
+                raise ValueError(f"No key called '{key}'. Use bind('{key}', key) "
+                                 f"first, or a key name like 'space'.") from None
+        return [self._key_code(key)]
+
+    def handle_event(self, event):
+        """Call this for every event in handle_inputs()."""
+        if event.type == pg.KEYDOWN:
+            self._new_pressed.add(event.key)
+            self._held.add(event.key)
+            self._held_ms[event.key] = 0
+        elif event.type == pg.KEYUP:
+            self._new_released.add(event.key)
+            self._held.discard(event.key)
+        elif event.type in (getattr(pg, "WINDOWFOCUSLOST", -1),):
+            # Window lost focus: let go of everything so keys don't get "stuck"
+            self._new_released |= self._held
+            self._held = set()
+        return False
+
+    def update(self, tick=0):
+        """Call this once per frame, at the START of update(tick)."""
+        self._pressed, self._new_pressed = self._new_pressed, set()
+        self._released, self._new_released = self._new_released, set()
+        for key in self._held:
+            if key not in self._pressed:
+                self._held_ms[key] = self._held_ms.get(key, 0) + tick
+
+    def is_pressed(self, key):
+        """True every frame while the key (or any key with that name) is held."""
+        return any(code in self._held for code in self._codes(key))
+
+    def was_pressed(self, key):
+        """True for one frame only, when the key goes down."""
+        return any(code in self._pressed for code in self._codes(key))
+
+    def was_released(self, key):
+        """True for one frame only, when the key comes up."""
+        return any(code in self._released for code in self._codes(key))
+
+    def held_time(self, key):
+        """How long (milliseconds) the key has been held, or 0."""
+        return max([self._held_ms.get(c, 0) for c in self._codes(key) if c in self._held] or [0])
+
+    def any_pressed(self):
+        """True on the frame any key is pressed ("Press any key to start")."""
+        return bool(self._pressed)
+
+
+# ================================
+# MouseInput Class
+# ================================
+
+class MouseInput:
+    """
+    Mouse buttons, position and scroll wheel - like KeyboardInput.
+
+        mouse = MouseInput()
+        mouse.bind("shoot", "left")           # "left", "middle", "right"
+
+        mouse.handle_event(event)             # in handle_inputs()
+        mouse.update(tick)                    # at the START of update(tick)
+
+        mouse.was_pressed("shoot")  mouse.is_pressed("left")  mouse.was_released("right")
+        mouse.pos       # (x, y)
+        mouse.moved     # True if it moved this frame
+        mouse.wheel     # scroll this frame: +1 up, -1 down, 0 none
+    """
+
+    BUTTONS = {"left": 1, "middle": 2, "right": 3}
+
+    def __init__(self):
+        self.binds = {}
+        self._held = set()
+        self._pressed, self._released = set(), set()
+        self._new_pressed, self._new_released = set(), set()
+        self._new_wheel = 0
+        self._new_moved = False
+        self.wheel = 0
+        self.moved = False
+        self._held_ms = {}
+
+    def bind(self, name, *buttons):
+        self.binds[name] = [self._code(b) for b in buttons]
+
+    def _code(self, button):
+        if isinstance(button, str):
+            if button not in self.BUTTONS:
+                raise ValueError(f"Mouse button must be 'left', 'middle' or 'right', "
+                                 f"not '{button}'")
+            return self.BUTTONS[button]
+        return button
+
+    def _codes(self, button):
+        if isinstance(button, str) and button in self.binds:
+            return self.binds[button]
+        return [self._code(button)]
+
+    @property
+    def pos(self):
+        return pg.mouse.get_pos()
+
+    def world_pos(self, camera):
+        """The mouse position in the world (when using a Camera)."""
+        return camera.screen_to_world(self.pos)
+
+    def handle_event(self, event):
+        if event.type == pg.MOUSEBUTTONDOWN and event.button in (1, 2, 3):
+            self._new_pressed.add(event.button)
+            self._held.add(event.button)
+            self._held_ms[event.button] = 0
+        elif event.type == pg.MOUSEBUTTONUP and event.button in (1, 2, 3):
+            self._new_released.add(event.button)
+            self._held.discard(event.button)
+        elif event.type == pg.MOUSEWHEEL:
+            self._new_wheel += event.y
+        elif event.type == pg.MOUSEMOTION:
+            self._new_moved = True
+        return False
+
+    def update(self, tick=0):
+        self._pressed, self._new_pressed = self._new_pressed, set()
+        self._released, self._new_released = self._new_released, set()
+        self.wheel, self._new_wheel = self._new_wheel, 0
+        self.moved, self._new_moved = self._new_moved, False
+        for b in self._held:
+            if b not in self._pressed:
+                self._held_ms[b] = self._held_ms.get(b, 0) + tick
+
+    def is_pressed(self, button):
+        return any(b in self._held for b in self._codes(button))
+
+    def was_pressed(self, button):
+        return any(b in self._pressed for b in self._codes(button))
+
+    def was_released(self, button):
+        return any(b in self._released for b in self._codes(button))
+
+    def held_time(self, button):
+        return max([self._held_ms.get(b, 0) for b in self._codes(button) if b in self._held] or [0])
+
+
+# ================================
+# AppWindow and GlobalKeys (Windows only)
+# ================================
+
+class _Windows:
+    """
+    The Windows functions that AppWindow and GlobalKeys need, set up once.
+    pygame can't make a window see-through or keep it on top, so we ask
+    Windows directly with ctypes (part of Python - nothing to install).
+
+    Every function gets its argument types (argtypes / restype) set here.
+    Without them, some calls quietly do nothing on 64-bit Python - which is
+    why this is hidden inside the library and not in your game.
+    """
+
+    user32 = None          # the Windows "user32" functions (None = not set up yet)
+    tried = False
+
+    @classmethod
+    def api(cls, who):
+        """Return user32, or None (with one warning) if this isn't Windows."""
+        if not cls.tried:
+            cls.tried = True
+            if sys.platform == "win32":
+                try:
+                    cls.user32 = cls._set_up()
+                except (OSError, AttributeError) as error:
+                    _warn_once(f"Couldn't use the Windows functions ({error})")
+        if cls.user32 is None:
+            _warn_once(f"{who} only works on Windows - on this computer it does "
+                       f"nothing (your program still runs).")
+        return cls.user32
+
+    @staticmethod
+    def _set_up():
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        long_ptr = ctypes.c_ssize_t               # 32 or 64 bits, like the Python
+        if ctypes.sizeof(ctypes.c_void_p) == 8:   # 64-bit Python
+            user32.get_style = user32.GetWindowLongPtrW
+            user32.set_style = user32.SetWindowLongPtrW
+        else:                                     # 32-bit Python
+            user32.get_style = user32.GetWindowLongW
+            user32.set_style = user32.SetWindowLongW
+        user32.get_style.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.get_style.restype = long_ptr
+        user32.set_style.argtypes = [wintypes.HWND, ctypes.c_int, long_ptr]
+        user32.set_style.restype = long_ptr
+        user32.SetLayeredWindowAttributes.argtypes = [wintypes.HWND, wintypes.COLORREF,
+                                                      wintypes.BYTE, wintypes.DWORD]
+        user32.SetLayeredWindowAttributes.restype = wintypes.BOOL
+        user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int,
+                                        ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                        wintypes.UINT]
+        user32.SetWindowPos.restype = wintypes.BOOL
+        user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+        user32.GetWindowRect.restype = wintypes.BOOL
+        user32.GetCursorPos.argtypes = [ctypes.POINTER(wintypes.POINT)]
+        user32.GetCursorPos.restype = wintypes.BOOL
+        user32.GetAsyncKeyState.argtypes = [ctypes.c_int]
+        user32.GetAsyncKeyState.restype = ctypes.c_short
+        # "On top" and "not on top" are special window handles: -1 and -2
+        user32.HWND_TOPMOST = wintypes.HWND(-1)
+        user32.HWND_NOTOPMOST = wintypes.HWND(-2)
+        user32.make_rect = wintypes.RECT
+        user32.make_point = wintypes.POINT
+        user32.ref = ctypes.byref
+        return user32
+
+
+class AppWindow:
+    """
+    Makes your pygame window see-through, keeps it on top of other windows,
+    and lets you drag it with the mouse. Good for overlays, like a "now
+    playing" display on top of a DJ program. (Windows only - on Mac / Linux
+    it prints one warning and does nothing.)
+
+        screen = pg.display.set_mode((900, 420), pg.NOFRAME)   # no title bar
+        window = AppWindow(transparent_color=(1, 1, 1), topmost=True,
+                           draggable=True, on_moved=save_position)
+        window.handle_event(event)        # in handle_inputs() (for dragging)
+        screen.fill((1, 1, 1))            # every pixel this colour is see-through
+
+    Make it AFTER pg.display.set_mode(). pg.NOFRAME is the same as
+    tkinter's root.overrideredirect(True).
+
+    Options (also work with config()):
+        transparent_color - every pixel exactly this colour becomes see-through
+                            (None = nothing is see-through). Use a colour you
+                            don't draw with, like (1, 1, 1) - not black, or
+                            your black outlines vanish too.
+        topmost           - True keeps the window on top of every other window
+        draggable         - True: press the mouse on anything you drew and drag
+                            to move the window
+        on_moved          - a function to run after you drag the window (e.g.
+                            to save where it is with save_data)
+
+    Methods:
+        config(option=value), cget("option")
+        move(x, y)              - put the window's top-left at (x, y) on the screen
+        get_position()          - (x, y) of the window's top-left on the screen
+
+    Good to know:
+        - See-through is all-or-nothing for each pixel. Use outline= on your
+          Labels, not shadow= (a half see-through shadow shows as dark grey).
+        - Clicks on see-through pixels go to the window underneath.
+    """
+
+    def __init__(self, transparent_color=None, topmost=False, draggable=False,
+                 on_moved=None, transparent_colour=None):
+        if not pg.display.get_init() or pg.display.get_surface() is None:
+            raise RuntimeError(
+                f"\n\n  >>> The mistake is in YOUR code: {_your_code()}\n"
+                f"  Make the window first with pg.display.set_mode(...), "
+                f"then make the AppWindow.\n")
+        self.transparent_color = _pick(transparent_color, transparent_colour)
+        self.topmost = topmost
+        self.draggable = draggable
+        self.on_moved = on_moved
+        self._grab = None            # while dragging: where the mouse holds the window
+        self._moved = False
+        self._hwnd = None            # Windows' number for our window
+        self._user32 = _Windows.api("AppWindow")
+        if self._user32 is not None:
+            self._hwnd = pg.display.get_wm_info().get("window")
+        self._apply()
+
+    # ---- options ----
+    def config(self, **options):
+        """Change options, e.g. window.config(topmost=False)."""
+        for name, value in options.items():
+            name = name.replace("colour", "color")
+            if name not in ("transparent_color", "topmost", "draggable", "on_moved"):
+                raise ValueError(f"AppWindow has no option '{name}'. Options are: "
+                                 f"transparent_color, topmost, draggable, on_moved")
+            setattr(self, name, value)
+        self._apply()
+
+    configure = config
+
+    def cget(self, option):
+        return getattr(self, option.replace("colour", "color"))
+
+    def _apply(self):
+        """Tell Windows about transparent_color and topmost."""
+        if self._hwnd is None:
+            return
+        user32 = self._user32
+        GWL_EXSTYLE, WS_EX_LAYERED, LWA_COLORKEY = -20, 0x80000, 0x1
+        style = user32.get_style(self._hwnd, GWL_EXSTYLE)
+        if self.transparent_color is not None:
+            colour = pg.Color(self.transparent_color)     # (1, 1, 1) or "#010101"
+            if (colour.r, colour.g, colour.b) == (0, 0, 0):
+                _warn_once("AppWindow: transparent_color is black, so black outlines "
+                           "and black text will be see-through too. Try (1, 1, 1).")
+            user32.set_style(self._hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED)
+            # Windows writes colours backwards: 0xBBGGRR
+            colorref = colour.r | (colour.g << 8) | (colour.b << 16)
+            if not user32.SetLayeredWindowAttributes(self._hwnd, colorref, 0, LWA_COLORKEY):
+                _warn_once("AppWindow: Windows wouldn't make the window see-through.")
+        elif style & WS_EX_LAYERED:
+            user32.set_style(self._hwnd, GWL_EXSTYLE, style & ~WS_EX_LAYERED)
+
+        SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE = 0x1, 0x2, 0x10
+        after = user32.HWND_TOPMOST if self.topmost else user32.HWND_NOTOPMOST
+        if not user32.SetWindowPos(self._hwnd, after, 0, 0, 0, 0,
+                                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE):
+            _warn_once("AppWindow: Windows wouldn't change 'topmost'.")
+
+    # ---- position ----
+    def move(self, x, y):
+        """Put the window's top-left corner at (x, y) on the screen."""
+        if self._hwnd is None:
+            return
+        SWP_NOSIZE, SWP_NOZORDER, SWP_NOACTIVATE = 0x1, 0x4, 0x10
+        self._user32.SetWindowPos(self._hwnd, None, int(x), int(y), 0, 0,
+                                  SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)
+
+    def get_position(self):
+        """(x, y) of the window's top-left corner on the screen."""
+        if self._hwnd is None:
+            return (0, 0)
+        rect = self._user32.make_rect()
+        self._user32.GetWindowRect(self._hwnd, self._user32.ref(rect))
+        return (rect.left, rect.top)
+
+    def _mouse_on_screen(self):
+        """
+        Where the mouse is on the whole screen. (pygame's mouse position is
+        measured from the window - but the window moves while we drag it,
+        which would make it shake.)
+        """
+        point = self._user32.make_point()
+        self._user32.GetCursorPos(self._user32.ref(point))
+        return (point.x, point.y)
+
+    # ---- dragging ----
+    def handle_event(self, event):
+        """
+        Call this for every event in handle_inputs() (after your Buttons, so
+        clicking a Button doesn't drag). Returns True while dragging.
+        """
+        if not self.draggable or self._hwnd is None:
+            return False
+        if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+            mouse_x, mouse_y = self._mouse_on_screen()
+            window_x, window_y = self.get_position()
+            self._grab = (mouse_x - window_x, mouse_y - window_y)
+            self._moved = False
+            return True
+        if event.type == pg.MOUSEMOTION and self._grab is not None:
+            mouse_x, mouse_y = self._mouse_on_screen()
+            self.move(mouse_x - self._grab[0], mouse_y - self._grab[1])
+            self._moved = True
+            return True
+        if self._grab is not None and (
+                (event.type == pg.MOUSEBUTTONUP and event.button == 1)
+                or event.type == getattr(pg, "WINDOWFOCUSLOST", -1)):
+            self._grab = None
+            if self._moved and self.on_moved is not None:
+                self.on_moved()
+            return True
+        return False
+
+    @property
+    def dragging(self):
+        """True while the window is being dragged."""
+        return self._grab is not None
+
+
+class GlobalKeys:
+    """
+    Hotkeys that work even when ANOTHER program is in front (e.g. a DJ
+    program). pygame only sees keys when its own window is chosen, so this
+    asks Windows instead. Same methods as KeyboardInput. (Windows only - on
+    Mac / Linux it prints one warning and the keys are never pressed.)
+
+        hotkeys = GlobalKeys()
+        hotkeys.bind("toggle", pg.K_F11)
+        hotkeys.bind("next", "o", ctrl=True, shift=True)   # Ctrl + Shift + O
+
+        hotkeys.update(tick)                 # at the START of update(tick)
+        if hotkeys.was_pressed("toggle"):    # True for ONE frame
+            ...
+
+    It only checks the keys you bind (it never records typing), and it does
+    not stop the other program getting the key too. So choose keys the other
+    program doesn't use, like Ctrl + Shift + a letter.
+
+    ctrl / shift / alt = True means that key must be held as well.
+    Leaving them out means they don't matter.
+
+    It works when your own window is chosen too, so don't bind the same key
+    in KeyboardInput as well, or it will happen twice.
+    """
+
+    # pygame key -> Windows key number, for keys that aren't letters or digits
+    _WINDOWS_KEYS = {
+        pg.K_SPACE: 0x20, pg.K_RETURN: 0x0D, pg.K_ESCAPE: 0x1B, pg.K_TAB: 0x09,
+        pg.K_BACKSPACE: 0x08, pg.K_LEFT: 0x25, pg.K_UP: 0x26, pg.K_RIGHT: 0x27,
+        pg.K_DOWN: 0x28, pg.K_INSERT: 0x2D, pg.K_DELETE: 0x2E, pg.K_HOME: 0x24,
+        pg.K_END: 0x23, pg.K_PAGEUP: 0x21, pg.K_PAGEDOWN: 0x22, pg.K_PAUSE: 0x13,
+        pg.K_PRINTSCREEN: 0x2C, pg.K_SCROLLLOCK: 0x91,
+        pg.K_MINUS: 0xBD, pg.K_EQUALS: 0xBB, pg.K_COMMA: 0xBC, pg.K_PERIOD: 0xBE,
+        pg.K_SLASH: 0xBF, pg.K_SEMICOLON: 0xBA, pg.K_LEFTBRACKET: 0xDB,
+        pg.K_RIGHTBRACKET: 0xDD, pg.K_BACKSLASH: 0xDC, pg.K_QUOTE: 0xDE,
+        pg.K_BACKQUOTE: 0xC0,
+        pg.K_LSHIFT: 0xA0, pg.K_RSHIFT: 0xA1, pg.K_LCTRL: 0xA2, pg.K_RCTRL: 0xA3,
+        pg.K_LALT: 0xA4, pg.K_RALT: 0xA5,
+        pg.K_KP_MULTIPLY: 0x6A, pg.K_KP_PLUS: 0x6B, pg.K_KP_MINUS: 0x6D,
+        pg.K_KP_PERIOD: 0x6E, pg.K_KP_DIVIDE: 0x6F, pg.K_KP_ENTER: 0x0D,
+    }
+    _CTRL, _SHIFT, _ALT = 0x11, 0x10, 0x12          # either Ctrl / Shift / Alt
+
+    def __init__(self):
+        self.binds = {}          # name -> list of (key, ctrl, shift, alt)
+        self._held = set()       # names held now
+        self._pressed = set()    # names pressed this frame
+        self._released = set()   # names let go this frame
+        self._held_ms = {}
+        self._user32 = _Windows.api("GlobalKeys")
+
+    def bind(self, name, *keys, ctrl=False, shift=False, alt=False):
+        """
+        Give one or more keys a name, e.g. bind("toggle", pg.K_F11) or
+        bind("next", "o", ctrl=True, shift=True).
+        """
+        if not keys:
+            raise ValueError(f"bind('{name}') needs a key, e.g. bind('{name}', pg.K_F11)")
+        self.binds[name] = [(self._windows_key(key), ctrl, shift, alt) for key in keys]
+
+    @classmethod
+    def _windows_key(cls, key):
+        """Turn a pygame key (pg.K_o) or key name ("o", "f11") into Windows' number."""
+        code = KeyboardInput._key_code(key)
+        if pg.K_a <= code <= pg.K_z:                  # letters: Windows uses capitals
+            return ord(chr(code).upper())
+        if pg.K_0 <= code <= pg.K_9:
+            return code
+        if pg.K_F1 <= code <= pg.K_F12:
+            return 0x70 + code - pg.K_F1
+        if pg.K_F13 <= code <= pg.K_F15:
+            return 0x7C + code - pg.K_F13
+        number_pad = [pg.K_KP0, pg.K_KP1, pg.K_KP2, pg.K_KP3, pg.K_KP4,
+                      pg.K_KP5, pg.K_KP6, pg.K_KP7, pg.K_KP8, pg.K_KP9]
+        if code in number_pad:                        # number pad 0 - 9
+            return 0x60 + number_pad.index(code)
+        if code in cls._WINDOWS_KEYS:
+            return cls._WINDOWS_KEYS[code]
+        raise ValueError(f"GlobalKeys can't use the key {pg.key.name(code)!r}. "
+                         f"Try a letter, a number, F1 - F15 or an arrow key.")
+
+    def _key_state(self, windows_key):
+        """True if Windows says the key is held down right now."""
+        if self._user32 is None:
+            return False
+        return bool(self._user32.GetAsyncKeyState(windows_key) & 0x8000)
+
+    def _check(self, name):
+        if name not in self.binds:
+            raise ValueError(f"GlobalKeys has no key called '{name}'. "
+                             f"Use bind('{name}', key) first.")
+
+    def handle_event(self, event):
+        """Does nothing (GlobalKeys asks Windows instead). Here so it matches KeyboardInput."""
+        return False
+
+    def update(self, tick=0):
+        """Call this once per frame, at the START of update(tick)."""
+        held_now = set()
+        for name, combos in self.binds.items():
+            for key, ctrl, shift, alt in combos:
+                if (self._key_state(key)
+                        and (not ctrl or self._key_state(self._CTRL))
+                        and (not shift or self._key_state(self._SHIFT))
+                        and (not alt or self._key_state(self._ALT))):
+                    held_now.add(name)
+                    break
+        self._pressed = held_now - self._held
+        self._released = self._held - held_now
+        self._held = held_now
+        for name in held_now:
+            self._held_ms[name] = 0 if name in self._pressed else self._held_ms.get(name, 0) + tick
+
+    def is_pressed(self, name):
+        """True every frame while the key is held."""
+        self._check(name)
+        return name in self._held
+
+    def was_pressed(self, name):
+        """True for one frame only, when the key goes down."""
+        self._check(name)
+        return name in self._pressed
+
+    def was_released(self, name):
+        """True for one frame only, when the key comes up."""
+        self._check(name)
+        return name in self._released
+
+    def held_time(self, name):
+        """How long (milliseconds) the key has been held, or 0."""
+        self._check(name)
+        return self._held_ms.get(name, 0) if name in self._held else 0
+
+    def any_pressed(self):
+        """True on the frame any bound key is pressed."""
+        return bool(self._pressed)
+
+
+# ================================
+# Cursor (change the mouse pointer)
+# ================================
+
+class Cursor:
+    """
+    Change the mouse pointer: a built-in one, or your own picture.
+    There is only one mouse, so you use the class itself (like Debug and
+    Particles) - no need to make one.
+
+        Cursor.set("crosshair")                              # a built-in pointer
+        Cursor.add("aim", "assets/crosshair.png", hotspot="center")
+        Cursor.set("aim")                                    # your own picture
+
+        Button(20, 80, 150, 50, "Play", cursor="hand")       # while over a widget
+        Cursor.attach(enemy, "aim_red", camera=camera)       # while over a sprite
+
+        Cursor.update(tick)      # in update(tick): picks the pointer to show
+        Cursor.draw(screen)      # LAST in draw_game() (for drawn pictures)
+
+    Built-in names: "arrow", "hand", "text", "crosshair", "wait", "move",
+    "no", "resize_lr", "resize_ud". tkinter's names work too
+    ("hand2", "xterm", "watch", "fleur", "cross", ...).
+
+    The hotspot is the pixel of the picture that does the clicking:
+    "topleft" (the default, like an arrow), "center" (like a crosshair),
+    or (x, y) in the picture's pixels.
+
+    Pictures use the computer's real pointer, so they move smoothly. If the
+    computer can't do that, or you give drawn=True, the normal pointer is
+    hidden and the picture is drawn by Cursor.draw(screen) instead.
+
+    Which pointer is shown each frame:
+        1. nothing, after Cursor.hide()
+        2. the top-most widget under the mouse that has a cursor
+           (disabled widgets are skipped, because they can't be clicked)
+           (an open Popup covers the widgets under it)
+        3. the last attach()ed thing under the mouse
+        4. the normal pointer from Cursor.set()  ("arrow" to start with)
+    """
+
+    # Built-in pointer names -> pygame's system cursors
+    BUILT_IN = {
+        "arrow": pg.SYSTEM_CURSOR_ARROW,
+        "hand": pg.SYSTEM_CURSOR_HAND,
+        "text": pg.SYSTEM_CURSOR_IBEAM,
+        "crosshair": pg.SYSTEM_CURSOR_CROSSHAIR,
+        "wait": pg.SYSTEM_CURSOR_WAIT,
+        "move": pg.SYSTEM_CURSOR_SIZEALL,
+        "no": pg.SYSTEM_CURSOR_NO,
+        "resize_lr": pg.SYSTEM_CURSOR_SIZEWE,
+        "resize_ud": pg.SYSTEM_CURSOR_SIZENS,
+    }
+    # tkinter's (old X11) names -> our plain names
+    TKINTER_NAMES = {
+        "hand1": "hand", "hand2": "hand", "xterm": "text", "watch": "wait",
+        "fleur": "move", "cross": "crosshair", "tcross": "crosshair",
+        "left_ptr": "arrow", "sb_h_double_arrow": "resize_lr",
+        "sb_v_double_arrow": "resize_ud",
+    }
+
+    pictures = {}         # name -> {"image": Surface, "hotspot": (x, y), "drawn": bool}
+    normal = "arrow"      # the pointer when the mouse is over nothing special
+    current = "arrow"     # the pointer being shown now
+    hidden = False
+    targets = []          # attach()ed things: [thing, name, camera, scene, was in a group]
+    _widgets = []         # (widget, offset, clip) for widgets drawn since the last update
+    _shown = None         # what the real pointer was last set to
+    _normal_scene = None  # the Scene that called set() (undone when it ends)
+
+    # ---- choosing pointers ----
+    @classmethod
+    def set(cls, cursor="arrow", hotspot="topleft", size=None, drawn=False):
+        """
+        Set the normal pointer: a built-in name, a name made with add(),
+        or a picture (file name or Surface).
+        """
+        if not isinstance(cursor, str) or cursor not in cls.pictures and "." in cursor:
+            # A picture: give it a name (its file name) so it can be reused
+            name = cursor if isinstance(cursor, str) else "picture"
+            cls.add(name, cursor, hotspot, size, drawn)
+            cursor = name
+        cls.normal = cls._name_of(cursor)
+        cls._normal_scene = _timer_scene[0]
+        cls.current = cls.normal
+        cls._show(cls.current)
+
+    @classmethod
+    def add(cls, name, image, hotspot="topleft", size=None, drawn=False):
+        """
+        Give a picture a name, e.g. Cursor.add("aim", "assets/crosshair.png", hotspot="center").
+        size scales the picture: a number (32) or (width, height).
+        """
+        if isinstance(size, (int, float)):
+            size = (size, size)
+        picture = load_image(image, size)
+        w, h = picture.get_size()
+        if hotspot == "center":
+            hotspot = (w // 2, h // 2)
+        elif hotspot == "topleft":
+            hotspot = (0, 0)
+        hotspot = (int(hotspot[0]), int(hotspot[1]))
+        if not (0 <= hotspot[0] < w and 0 <= hotspot[1] < h):
+            raise ValueError(f"hotspot {hotspot} is outside the {w}x{h} picture")
+        cls.pictures[name] = {"image": picture, "hotspot": hotspot, "drawn": drawn}
+        cls._shown = None                    # the picture may have changed
+        return name
+
+    @classmethod
+    def attach(cls, target, name, camera=None):
+        """
+        Show this pointer while the mouse is over target (anything with a
+        .rect, e.g. a sprite). Give camera= for things in a scrolling world.
+        """
+        in_group = isinstance(target, pg.sprite.Sprite) and target.alive()
+        cls.targets.append([target, cls._name_of(name), camera, _timer_scene[0], in_group])
+
+    @classmethod
+    def detach(cls, target):
+        """Stop using a special pointer for target."""
+        cls.targets = [t for t in cls.targets if t[0] is not target]
+
+    @classmethod
+    def hide(cls):
+        """Hide the pointer (e.g. during a cutscene)."""
+        cls.hidden = True
+        cls._show(cls.current)
+
+    @classmethod
+    def show(cls):
+        cls.hidden = False
+        cls._show(cls.current)
+
+    @classmethod
+    def reset(cls):
+        """Back to the normal arrow, and forget every attach()."""
+        cls.targets = []
+        cls._widgets = []
+        cls.hidden = False
+        cls.normal = cls.current = "arrow"
+        cls._normal_scene = None
+        cls._show("arrow")
+
+    @classmethod
+    def _name_of(cls, name):
+        """Turn a name (or tkinter name) into one Cursor knows, or explain the mistake."""
+        if name in cls.pictures or name in cls.BUILT_IN:
+            return name
+        if name in cls.TKINTER_NAMES:
+            return cls.TKINTER_NAMES[name]
+        known = list(cls.BUILT_IN) + list(cls.pictures)
+        raise ValueError(f"Cursor has no pointer called '{name}'. Use one of: "
+                         f"{', '.join(known)} (or add your own picture with Cursor.add())")
+
+    # ---- every frame ----
+    @classmethod
+    def update(cls, tick=0):
+        """Work out which pointer to show this frame (call it in update(tick))."""
+        mouse = pg.mouse.get_pos()
+        choice = None
+        # 1. Widgets: the last one drawn is on top, so look from the end
+        for widget, offset, clip in reversed(cls._widgets):
+            area = widget.get_rect(offset).clip(clip)    # clip: e.g. inside a ScrolledFrame
+            if isinstance(widget, Popup) and widget.dim:
+                area = clip                              # a dimmed Popup covers the screen
+            if not area.collidepoint(mouse):
+                continue
+            # (a widget can choose a pointer for each spot, e.g. a Table's column edges)
+            name = widget._cursor_at(mouse, offset) if hasattr(widget, "_cursor_at") \
+                else widget.cursor
+            if name is not None and widget.state != "disabled":
+                choice = name
+                break
+            if isinstance(widget, Popup):                # a Popup covers what is under it
+                break
+        cls._widgets = []
+        # 2. attach()ed things (forget sprites that were killed, e.g. enemies that died)
+        cls.targets = [t for t in cls.targets if not (t[4] and not t[0].alive())]
+        if choice is None:
+            for target, name, camera, scene, in_group in reversed(cls.targets):
+                if cls._over(target, camera, mouse):
+                    choice = name
+                    break
+        cls.current = cls._name_of(choice) if choice is not None else cls.normal
+        cls._show(cls.current)
+
+    @classmethod
+    def _over(cls, target, camera, mouse):
+        """True if the mouse is over an attach()ed thing."""
+        if not getattr(target, "visible", True):
+            return False
+        if isinstance(target, Widget):
+            return target.showing and target.get_rect(target._last_offset).collidepoint(mouse)
+        point = camera.screen_to_world(mouse) if camera is not None else mouse
+        return _rect_of(target).collidepoint(point)
+
+    @classmethod
+    def draw(cls, screen):
+        """Draw a drawn-mode picture at the mouse. Call it LAST in draw_game()."""
+        mx, my = pg.mouse.get_pos()
+        picture = cls.pictures.get(cls.current)
+        if not cls.hidden and picture is not None and picture["drawn"]:
+            hx, hy = picture["hotspot"]
+            screen.blit(picture["image"], (mx - hx, my - hy))
+        if Debug.on:
+            # Show the hotspot (the pixel that clicks) and the pointer's name
+            pg.draw.circle(screen, (255, 0, 255), (mx, my), 3)
+            words = get_font(None, 16).render(cls.current, True, (255, 0, 255))
+            screen.blit(words, (mx + 12, my + 12))
+
+    # ---- behind the scenes ----
+    @classmethod
+    def _on_screen(cls, widget, offset, clip):
+        """Called by widgets with a cursor when they are drawn (see Widget._drawn)."""
+        cls._widgets.append((widget, offset, clip))
+        if len(cls._widgets) > 2000:
+            # The list is only emptied by update(), so it must never be called
+            cls._widgets = []
+            _warn_once("A widget has a cursor, but Cursor.update(tick) is never called. "
+                       "Add Cursor.update(tick) to update(tick) to make widget cursors work.")
+
+    @classmethod
+    def _scene_ended(cls, scene):
+        """Undo set() and attach() calls made by a Scene that has just ended."""
+        cls.targets = [t for t in cls.targets if t[3] != scene]
+        if scene is not None and cls._normal_scene == scene:
+            cls.normal = "arrow"
+            cls._normal_scene = None
+
+    @classmethod
+    def _show(cls, name):
+        """Change the real mouse pointer, but only when it needs to change (it is slow)."""
+        picture = cls.pictures.get(name)
+        wanted = (name, cls.hidden, picture["drawn"] if picture else False)
+        if wanted == cls._shown:
+            return
+        cls._shown = wanted
+        try:
+            if cls.hidden:
+                pg.mouse.set_visible(False)
+            elif picture is None:
+                pg.mouse.set_visible(True)
+                pg.mouse.set_cursor(cls.BUILT_IN[name])
+            elif picture["drawn"]:
+                pg.mouse.set_visible(False)       # Cursor.draw() draws the picture
+            else:
+                pg.mouse.set_cursor(pg.cursors.Cursor(picture["hotspot"], picture["image"]))
+                pg.mouse.set_visible(True)
+        except (pg.error, AttributeError):
+            if picture is not None and not picture["drawn"]:
+                # This computer can't use pictures as pointers: draw it ourselves
+                _warn_once("This computer can't use a picture as the mouse pointer, so "
+                           "Cursor will draw it instead (call Cursor.draw(screen) last).")
+                picture["drawn"] = True
+                cls._shown = None
+                cls._show(name)
+            else:
+                _warn_once("This computer can't change the mouse pointer "
+                           "(built-in pointers won't show).")
+
+
+# ================================
+# Audio (sound setup and volume)
+# ================================
+
+class Audio:
+    """
+    Sound setup and the volume of everything.
+    Volumes are 0 - 100. If the computer has no sound output, sounds are
+    simply skipped - the game still runs.
+
+        init_audio()                     # in init_pygame(), BEFORE pg.init()
+        Audio.set_music_volume(50)
+        Audio.set_sfx_volume(80)
+        Audio.toggle_mute()
+
+    Link volumes to widgets (e.g. a Scale and a Checkbutton in a settings menu):
+        Audio.link(music_volume=music_var, sfx_volume=sfx_var, muted=mute_var)
+    """
+
+    available = None          # None = not checked yet, then True / False
+    music_volume = 70
+    sfx_volume = 80
+    muted = False
+    _sounds = []              # every SoundEffect, so volume changes reach them
+    _warned = False
+
+    @classmethod
+    def check(cls):
+        """Start the mixer if needed. Returns True if sound works."""
+        if cls.available is None or (cls.available and not pg.mixer.get_init()):
+            try:
+                if not pg.mixer.get_init():
+                    pg.mixer.init()
+                cls.available = True
+            except pg.error as error:
+                cls.available = False
+                if not cls._warned:
+                    print("No sound output found - sounds are turned off.", error)
+                    cls._warned = True
+        return cls.available
+
+    @classmethod
+    def sfx_factor(cls):
+        return 0 if cls.muted else cls.sfx_volume / 100
+
+    @classmethod
+    def music_factor(cls):
+        return 0 if cls.muted else cls.music_volume / 100
+
+    @classmethod
+    def _apply(cls):
+        """Send the current volumes to the music and every sound effect."""
+        if not cls.check():
+            return
+        pg.mixer.music.set_volume(Music.volume * cls.music_factor())
+        for sound in cls._sounds:
+            sound._apply_volume()
+
+    @classmethod
+    def set_music_volume(cls, volume):
+        cls.music_volume = max(0, min(100, volume))
+        cls._apply()
+
+    @classmethod
+    def set_sfx_volume(cls, volume):
+        cls.sfx_volume = max(0, min(100, volume))
+        cls._apply()
+
+    @classmethod
+    def set_muted(cls, muted=True):
+        cls.muted = bool(muted)
+        cls._apply()
+
+    @classmethod
+    def toggle_mute(cls):
+        cls.set_muted(not cls.muted)
+
+    @classmethod
+    def link(cls, music_volume=None, sfx_volume=None, muted=None):
+        """Link volumes to IntVars / a BooleanVar, so widgets control them."""
+        if music_volume is not None:
+            music_volume.trace_add("write", lambda: cls.set_music_volume(music_volume.get()))
+            cls.set_music_volume(music_volume.get())
+        if sfx_volume is not None:
+            sfx_volume.trace_add("write", lambda: cls.set_sfx_volume(sfx_volume.get()))
+            cls.set_sfx_volume(sfx_volume.get())
+        if muted is not None:
+            muted.trace_add("write", lambda: cls.set_muted(muted.get()))
+            cls.set_muted(muted.get())
+
+
+def init_audio(frequency=44100, buffer=512):
+    """
+    Set up sound with a short delay (so sounds play straight away when a
+    key is pressed). Call it in init_pygame() BEFORE pg.init().
+    """
+    try:
+        if pg.mixer.get_init():
+            pg.mixer.quit()
+        pg.mixer.pre_init(frequency, -16, 2, buffer)
+        pg.mixer.init(frequency, -16, 2, buffer)
+        pg.mixer.set_num_channels(32)
+        Audio.available = True
+    except pg.error as error:
+        Audio.available = False
+        print("No sound output found - sounds are turned off.", error)
+        Audio._warned = True
+
+
+# ================================
+# SoundEffect Class
+# ================================
+
+class SoundEffect:
+    """
+    A short sound (jump, coin, laser...). Safe to use inside your game loop.
+
+    Parameters:
+        files       - a sound file, or a list of files (one is picked at random,
+                      good for footsteps)
+        volume      - 0.0 to 1.0
+        cooldown    - smallest time between plays in milliseconds
+                      (e.g. 150 for a laser that is held down)
+        max_playing - most copies playing at once (stops sounds piling up)
+
+    Ways to play it:
+        jump.play()                        play now (respects cooldown / max_playing)
+        coin.play_on(touching_coin)        play only when the True/False value
+                                           CHANGES to True - safe to call every frame
+        engine.play_while(thrust_held)     loop while True, stop when False -
+                                           safe to call every frame
+
+    Example:
+        jump = SoundEffect("jump.wav")
+        if keys.was_pressed("jump"):
+            jump.play()
+    """
+
+    def __init__(self, files, volume=1.0, cooldown=0, max_playing=None):
+        self.files = [files] if isinstance(files, str) else list(files)
+        self.volume = volume
+        self.cooldown = cooldown
+        self.max_playing = max_playing
+        self._sounds = []
+        self._channels = []
+        self._last_play = -10 ** 9
+        self._last_condition = False
+        self._loop_channel = None
+        if Audio.check():
+            for f in self.files:
+                self._sounds.append(pg.mixer.Sound(f))
+        Audio._sounds.append(self)
+        self._apply_volume()
+
+    def _apply_volume(self):
+        for sound in self._sounds:
+            sound.set_volume(self.volume * Audio.sfx_factor())
+
+    def set_volume(self, volume):
+        """Change this sound's volume (0.0 to 1.0)."""
+        self.volume = max(0.0, min(1.0, volume))
+        self._apply_volume()
+
+    def _playing_channels(self):
+        self._channels = [c for c in self._channels if c is not None and c.get_busy()]
+        return self._channels
+
+    def is_playing(self):
+        return bool(self._playing_channels())
+
+    def play(self, loops=0):
+        """Play the sound. Returns False if it was skipped (cooldown / limit / no sound)."""
+        if not self._sounds:
+            return False
+        now = pg.time.get_ticks()
+        if now - self._last_play < self.cooldown:
+            return False
+        if self.max_playing is not None and len(self._playing_channels()) >= self.max_playing:
+            return False
+        import random
+        channel = random.choice(self._sounds).play(loops)
+        if channel is None:              # every channel busy
+            return False
+        self._channels.append(channel)
+        self._last_play = now
+        return True
+
+    def play_on(self, condition):
+        """
+        Play once each time condition changes from False to True.
+        Call it every frame, e.g. coin_sound.play_on(player.collides_with(coin)).
+        """
+        played = False
+        if condition and not self._last_condition:
+            played = self.play()
+        self._last_condition = bool(condition)
+        return played
+
+    def play_while(self, condition, fade_ms=60):
+        """
+        Loop the sound while condition is True and stop it when False.
+        Call it every frame, e.g. engine.play_while(keys.is_pressed("thrust")).
+        """
+        looping = self._loop_channel is not None and self._loop_channel.get_busy()
+        if condition and not looping and self._sounds:
+            self._loop_channel = self._sounds[0].play(-1)
+        elif not condition and looping:
+            self._loop_channel.fadeout(fade_ms)
+            self._loop_channel = None
+
+    def stop(self):
+        """Stop every copy of this sound."""
+        for channel in self._playing_channels():
+            channel.stop()
+        if self._loop_channel is not None:
+            self._loop_channel.stop()
+            self._loop_channel = None
+
+    def fadeout(self, ms=300):
+        for channel in self._playing_channels():
+            channel.fadeout(ms)
+        if self._loop_channel is not None:
+            self._loop_channel.fadeout(ms)
+            self._loop_channel = None
+
+
+# ================================
+# Music Class (background music)
+# ================================
+
+class Music:
+    """
+    Background music. Plays one track at a time, streamed from the file
+    (so long songs don't use much memory). Use it straight from the class:
+
+        Music.play("menu.wav", fade_ms=1000)    # loops forever by default
+        Music.switch("level1.wav", fade_ms=800) # fade out, then the new track
+        Music.pause()   Music.unpause()   Music.stop(fade_ms=500)
+        Music.playlist(["track1.wav", "track2.wav"], shuffle=True)
+
+    Call Music.update(tick) in update(tick) when you use switch() or playlist().
+    """
+
+    volume = 1.0          # this track's volume (0.0 - 1.0), Audio sets the overall level
+    current = None
+    _next = None          # (file, loops, fade_in) waiting for a fade out to finish
+    _fade_left = 0
+    _playlist = []
+    _playlist_index = 0
+    _shuffle = False
+    _paused = False
+
+    @classmethod
+    def play(cls, file, loops=-1, fade_ms=0, volume=None):
+        """Play a track. loops=-1 repeats forever, 0 plays once."""
+        if volume is not None:
+            cls.volume = volume
+        cls._next = None
+        if not Audio.check():
+            cls.current = file
+            return
+        pg.mixer.music.load(file)
+        pg.mixer.music.set_volume(cls.volume * Audio.music_factor())
+        pg.mixer.music.play(loops, fade_ms=fade_ms)
+        cls.current = file
+        cls._paused = False
+
+    @classmethod
+    def switch(cls, file, fade_ms=800, loops=-1):
+        """Fade out the current track, then fade in a new one."""
+        if file == cls.current and cls.is_playing():
+            return
+        cls._playlist = []
+        if not (Audio.check() and pg.mixer.music.get_busy()):
+            cls.play(file, loops, fade_ms)
+            return
+        pg.mixer.music.fadeout(fade_ms)
+        cls._next = (file, loops, fade_ms)
+        cls._fade_left = fade_ms
+
+    @classmethod
+    def playlist(cls, files, shuffle=False):
+        """Play a list of tracks one after another (forever)."""
+        import random
+        cls._playlist = list(files)
+        cls._shuffle = shuffle
+        if shuffle:
+            random.shuffle(cls._playlist)
+        cls._playlist_index = 0
+        cls.play(cls._playlist[0], loops=0)
+        cls._playlist = list(cls._playlist)
+
+    @classmethod
+    def update(cls, tick=0):
+        """Needed for switch() and playlist(): starts the next track at the right time."""
+        if not Audio.check():
+            return
+        if cls._next is not None:
+            cls._fade_left -= tick
+            if cls._fade_left <= 0 or not pg.mixer.music.get_busy():
+                file, loops, fade_ms = cls._next
+                cls.play(file, loops, fade_ms)
+        elif cls._playlist and not cls._paused and not pg.mixer.music.get_busy():
+            import random
+            cls._playlist_index += 1
+            if cls._playlist_index >= len(cls._playlist):
+                cls._playlist_index = 0
+                if cls._shuffle:
+                    random.shuffle(cls._playlist)
+            playlist = cls._playlist
+            cls.play(playlist[cls._playlist_index], loops=0)
+            cls._playlist = playlist
+
+    @classmethod
+    def pause(cls):
+        if Audio.check():
+            pg.mixer.music.pause()
+        cls._paused = True
+
+    @classmethod
+    def unpause(cls):
+        if Audio.check():
+            pg.mixer.music.unpause()
+        cls._paused = False
+
+    @classmethod
+    def stop(cls, fade_ms=0):
+        cls._next = None
+        cls._playlist = []
+        cls.current = None
+        if Audio.check():
+            if fade_ms:
+                pg.mixer.music.fadeout(fade_ms)
+            else:
+                pg.mixer.music.stop()
+
+    @classmethod
+    def set_volume(cls, volume):
+        """This track's volume, 0.0 - 1.0 (Audio.set_music_volume is the overall level)."""
+        cls.volume = max(0.0, min(1.0, volume))
+        Audio._apply()
+
+    @classmethod
+    def is_playing(cls):
+        return bool(Audio.check() and pg.mixer.music.get_busy() and not cls._paused)
+
+
+# ================================
+# Grid Class
+# ================================
+
+class Grid:
+    """
+    A grid of cells for inventories, board games, puzzles and level editors.
+    DragObjects given this grid snap into its cells when dropped.
+
+    Parameters:
+        x, y          - top-left corner
+        cols, rows    - number of columns and rows
+        cell_size     - size of each cell: 64, or (width, height)
+        show_lines    - draw the grid lines
+        line_color    - colour of the lines
+        bg            - colour behind the grid (None = see-through)
+        one_per_cell  - True: only one item can be in each cell
+        snap          - True: dropped items snap to the middle of a cell
+        highlight     - True: show the cell a dragged item will drop into
+        good_color, bad_color - highlight colours (can drop / can't drop)
+        accepts       - which items the whole grid takes: None (anything),
+                        a kind ("potion"), a list of kinds, or a function
+                        given the item that returns True / False
+
+    Slots (one cell with its own rule, e.g. an equipment slot):
+        equipment.set_slot(0, 0, accepts="sword", label="Sword")
+        equipment.set_slot(0, 1, accepts=["helmet", "hat"], image="helmet_outline.png")
+
+    Example:
+        board = Grid(100, 100, cols=8, rows=8, cell_size=64)
+        board.place(king, 4, 0)
+        board.cell_at(mouse.pos)       # -> (col, row) or None
+    """
+
+    def __init__(self, x, y, cols, rows, cell_size=64, show_lines=True,
+                 line_color=None, line_colour=None, bg=None, one_per_cell=True,
+                 snap=True, highlight=True, good_color=(80, 220, 120, 90),
+                 bad_color=(230, 70, 70, 90), accepts=None):
+        self.x, self.y = x, y
+        self.cols, self.rows = cols, rows
+        if isinstance(cell_size, (int, float)):
+            cell_size = (cell_size, cell_size)
+        self.cell_w, self.cell_h = cell_size
+        self.show_lines = show_lines
+        self.line_color = _pick(line_color, line_colour, (120, 120, 140))
+        self.bg = bg
+        self.one_per_cell = one_per_cell
+        self.snap = snap
+        self.highlight = highlight
+        self.good_color = good_color
+        self.bad_color = bad_color
+        self.accepts = accepts
+        self.slots = {}            # (col, row) -> {"accepts", "label", "image"}
+        self.items = {}            # (col, row) -> item
+        self.hover_cell = None     # set by a DragObject while it is dragged
+        self.hover_item = None
+
+    @property
+    def rect(self):
+        return pg.Rect(self.x, self.y, self.cols * self.cell_w, self.rows * self.cell_h)
+
+    # ---- cells ----
+    def cell_at(self, pos):
+        """The (col, row) at a screen position, or None if outside the grid."""
+        col = int((pos[0] - self.x) // self.cell_w)
+        row = int((pos[1] - self.y) // self.cell_h)
+        if 0 <= col < self.cols and 0 <= row < self.rows:
+            return (col, row)
+        return None
+
+    def cell_rect(self, col, row):
+        return pg.Rect(self.x + col * self.cell_w, self.y + row * self.cell_h,
+                       self.cell_w, self.cell_h)
+
+    def cell_center(self, col, row):
+        return self.cell_rect(col, row).center
+
+    def all_cells(self):
+        return [(c, r) for r in range(self.rows) for c in range(self.cols)]
+
+    # ---- items ----
+    def item_at(self, col, row):
+        return self.items.get((col, row))
+
+    def is_free(self, col, row):
+        return (col, row) not in self.items
+
+    def cell_of(self, item):
+        """The cell an item is in, or None."""
+        for cell, other in self.items.items():
+            if other is item:
+                return cell
+        return None
+
+    def set_slot(self, col, row, accepts=None, label=None, image=None):
+        """
+        Give one cell its own rule. label / image are shown (faded) while
+        the slot is empty, so players know what goes there.
+        """
+        self.slots[(col, row)] = {"accepts": accepts, "label": label, "image": image}
+
+    @staticmethod
+    def _allowed(item, rule):
+        """Check an item against an accepts rule (None, kind, list or function)."""
+        if rule is None:
+            return True
+        if callable(rule):
+            return bool(rule(item))
+        kinds = getattr(item, "kinds", ())
+        rules = [rule] if isinstance(rule, str) else list(rule)
+        return any(r in kinds for r in rules)
+
+    def accepts_item(self, item, col, row):
+        """True if the grid and the slot both allow this item."""
+        slot = self.slots.get((col, row))
+        return self._allowed(item, self.accepts) and \
+            (slot is None or self._allowed(item, slot["accepts"]))
+
+    def can_place(self, item, col, row):
+        """True if item is allowed in this cell (inside, right kind, and free)."""
+        if not (0 <= col < self.cols and 0 <= row < self.rows):
+            return False
+        if item is not None and not self.accepts_item(item, col, row):
+            return False
+        other = self.items.get((col, row))
+        return other is None or other is item or not self.one_per_cell
+
+    def place(self, item, col, row):
+        """Put an item in a cell (moving it there). Returns False if not allowed."""
+        if not self.can_place(item, col, row):
+            return False
+        self.remove(item)
+        if self.one_per_cell or (col, row) not in self.items:
+            self.items[(col, row)] = item
+        if self.snap and hasattr(item, "rect"):
+            item.rect.center = self.cell_center(col, row)
+        if hasattr(item, "cell"):
+            item.cell = (col, row)
+            item.grid = self
+        return True
+
+    def remove(self, item):
+        """Take an item out of the grid (it stays where it is on screen)."""
+        cell = self.cell_of(item)
+        if cell is not None:
+            del self.items[cell]
+            if hasattr(item, "cell"):
+                item.cell = None
+                item.grid = None
+
+    def clear(self):
+        self.items = {}
+
+    def first_free_cell(self):
+        for cell in self.all_cells():
+            if self.is_free(*cell):
+                return cell
+        return None
+
+    # ---- drawing ----
+    def draw(self, screen):
+        r = self.rect
+        if self.bg is not None:
+            pg.draw.rect(screen, self.bg, r)
+        # Empty slots show what goes in them (faded)
+        for cell, slot in self.slots.items():
+            if cell in self.items:
+                continue
+            cell_rect = self.cell_rect(*cell)
+            if slot["image"] is not None:
+                picture = load_image(slot["image"], (self.cell_w * 3 // 4, self.cell_h * 3 // 4)).copy()
+                picture.set_alpha(90)
+                screen.blit(picture, picture.get_rect(center=cell_rect.center))
+            if slot["label"]:
+                words = get_font(None, 18).render(str(slot["label"]), True, (170, 170, 170))
+                screen.blit(words, words.get_rect(midbottom=(cell_rect.centerx, cell_rect.bottom - 3)))
+        if self.highlight and self.hover_cell is not None:
+            good = self.can_place(self.hover_item, *self.hover_cell)
+            shade = pg.Surface((self.cell_w, self.cell_h), pg.SRCALPHA)
+            shade.fill(self.good_color if good else self.bad_color)
+            screen.blit(shade, self.cell_rect(*self.hover_cell))
+        if self.show_lines:
+            for c in range(self.cols + 1):
+                x = self.x + c * self.cell_w
+                pg.draw.line(screen, self.line_color, (x, r.top), (x, r.bottom))
+            for row in range(self.rows + 1):
+                y = self.y + row * self.cell_h
+                pg.draw.line(screen, self.line_color, (r.left, y), (r.right, y))
+
+
+# ================================
+# DragObject Class
+# ================================
+
+class DragObject(SpriteObject):
+    """
+    A sprite you can pick up and move with the mouse.
+
+    Parameters:
+        x, y, width, height, image, animator, bg - the same as SpriteObject
+        grid        - a Grid to snap into when dropped, or a list of Grids
+                      (e.g. [inventory, equipment]) it can move between
+        bounds      - a pg.Rect it must stay inside (optional)
+        on_pick_up  - function to run when it is picked up
+        on_drop     - function to run when it is dropped
+        return_if_invalid - True: go back to where it started if dropped
+                            outside the grid / on a taken cell
+        button      - mouse button to drag with: "left" or "right"
+        kind        - what sort of item it is, e.g. "sword", or a list like
+                      ["armor", "helmet"]. Grids / slots use this in accepts=
+        stats       - a dictionary of anything you like, e.g.
+                      {"damage": 5, "weight": 2, "rarity": "rare"}
+                      (also usable as item.stats["damage"])
+
+    Attributes:
+        dragging    - True while it is being held
+        cell        - (col, row) in its grid, or None
+        grid        - the Grid it is in now, or None
+
+    Use a DragGroup when you have several, so only the top one is picked up.
+
+    Example:
+        sword = DragObject(50, 50, image="sword.png", grid=inventory)
+        inventory.place(sword, 0, 0)
+    """
+
+    def __init__(self, x, y, width=None, height=None, image=None, animator=None,
+                 bg=(255, 0, 255), grid=None, bounds=None, on_pick_up=None, on_drop=None,
+                 return_if_invalid=True, button="left", enabled=True, kind=None,
+                 stats=None, name=None):
+        super().__init__(x, y, width, height, image, animator, bg)
+        if kind is None:
+            self.kinds = []
+        elif isinstance(kind, str):
+            self.kinds = [kind]
+        else:
+            self.kinds = list(kind)
+        self.stats = dict(stats) if stats else {}
+        self.name = name
+        if grid is None:
+            self.grids = []
+        elif isinstance(grid, (list, tuple)):
+            self.grids = list(grid)
+        else:
+            self.grids = [grid]
+        self.grid = None            # the grid it is in (set by Grid.place)
+        self.bounds = bounds
+        self.on_pick_up = on_pick_up
+        self.on_drop = on_drop
+        self.return_if_invalid = return_if_invalid
+        self.button = MouseInput.BUTTONS.get(button, button)
+        self.enabled = enabled
+        self.dragging = False
+        self.cell = None
+        self.start_pos = self.rect.topleft
+        self._grab = (0, 0)
+
+    @property
+    def kind(self):
+        """The first kind (or None)."""
+        return self.kinds[0] if self.kinds else None
+
+    def is_kind(self, kind):
+        """True if the item is this kind, e.g. item.is_kind("weapon")."""
+        return kind in self.kinds
+
+    def pick_up(self, mouse_pos):
+        self.dragging = True
+        self.start_pos = self.rect.topleft
+        self._start_cell = self.cell
+        self._start_grid = self.grid
+        self._grab = (mouse_pos[0] - self.rect.x, mouse_pos[1] - self.rect.y)
+        if self.on_pick_up:
+            self.on_pick_up()
+
+    def return_to_start(self):
+        """Go back to where it was picked up from."""
+        self.rect.topleft = self.start_pos
+        start_grid = getattr(self, "_start_grid", None)
+        if start_grid is not None and self._start_cell is not None:
+            start_grid.place(self, *self._start_cell)
+
+    def _move_to_mouse(self, mouse_pos):
+        self.rect.topleft = (mouse_pos[0] - self._grab[0], mouse_pos[1] - self._grab[1])
+        if self.bounds is not None:
+            self.rect.clamp_ip(self.bounds)
+        for grid in self.grids:
+            grid.hover_cell = grid.cell_at(self.rect.center)
+            grid.hover_item = self
+
+    def drop(self):
+        self.dragging = False
+        if self.grids:
+            for grid in self.grids:
+                grid.hover_cell = None
+            # Find the grid (and cell) under the middle of the object
+            target = None
+            for grid in self.grids:
+                cell = grid.cell_at(self.rect.center)
+                if cell is not None:
+                    target = (grid, cell)
+                    break
+            if target and target[0].can_place(self, *target[1]):
+                if self.grid is not None and self.grid is not target[0]:
+                    self.grid.remove(self)
+                target[0].place(self, *target[1])
+            elif self.return_if_invalid:
+                self.return_to_start()
+            elif self.grid is not None:
+                self.grid.remove(self)      # left outside the grid
+        if self.on_drop:
+            self.on_drop()
+
+    def handle_event(self, event, offset=(0, 0)):
+        """Returns True if this object used the event."""
+        if not (self.enabled and self.visible):
+            return False
+        if event.type == pg.MOUSEBUTTONDOWN and event.button == self.button \
+                and self.rect.collidepoint(event.pos):
+            self.pick_up(event.pos)
+            return True
+        if event.type == pg.MOUSEMOTION and self.dragging:
+            self._move_to_mouse(event.pos)
+            return True
+        if event.type == pg.MOUSEBUTTONUP and event.button == self.button and self.dragging:
+            self._move_to_mouse(event.pos)
+            self.drop()
+            return True
+        return False
+
+    def draw(self, screen, camera=None):
+        if not self.visible:
+            return
+        if self.dragging:
+            # A small shadow so it looks "picked up"
+            shadow = pg.Surface(self.rect.size, pg.SRCALPHA)
+            shadow.fill((0, 0, 0, 70))
+            screen.blit(shadow, self.rect.move(5, 5))
+        super().draw(screen, camera)
+
+
+# ================================
+# DragGroup Class
+# ================================
+
+class DragGroup:
+    """
+    Holds several DragObjects. Only the top one under the mouse is picked up,
+    and the one being dragged is drawn on top.
+
+        items = DragGroup(sword, shield, potion)
+        items.handle_event(event)      # in handle_inputs()
+        items.update(tick)             # in update(tick)
+        items.draw(screen)             # in draw_game()
+    """
+
+    def __init__(self, *items):
+        self.items = list(items)
+
+    def add(self, *items):
+        self.items.extend(items)
+
+    def remove(self, item):
+        if item in self.items:
+            self.items.remove(item)
+        if getattr(item, "grid", None) is not None:
+            item.grid.remove(item)
+
+    def __iter__(self):
+        return iter(list(self.items))
+
+    def __len__(self):
+        return len(self.items)
+
+    def dragged(self):
+        """The object being dragged, or None."""
+        for item in self.items:
+            if item.dragging:
+                return item
+        return None
+
+    def handle_event(self, event, offset=(0, 0)):
+        # The top item (drawn last) gets the first chance
+        for item in reversed(self.items):
+            if item.handle_event(event, offset):
+                if item.dragging and self.items[-1] is not item:
+                    self.items.remove(item)
+                    self.items.append(item)      # bring to the front
+                return True
+        return False
+
+    def update(self, tick):
+        for item in self.items:
+            item.update(tick)
+
+    def draw(self, screen, camera=None):
+        for item in self.items:
+            item.draw(screen, camera)
+
+
+# ================================
+# Path Class
+# ================================
+
+def _rect_of(thing):
+    """Get a pg.Rect from a Rect, or anything with a .rect."""
+    return thing if isinstance(thing, pg.Rect) else thing.rect
+
+
+class Path:
+    """
+    A list of points for things to follow (enemy routes, moving platforms...).
+
+    Parameters:
+        points - [(x, y), (x, y), ...]
+        mode   - "loop"      go back to the first point and repeat
+                 "ping_pong" go to the end, then back again
+                 "once"      stop at the last point
+        color  - colour used when drawing it (for debugging)
+
+    Draw it in Tiled with the Polyline tool and load it with
+    level.get_path("guard_route")  (see the README: "Drawing a path in Tiled").
+
+    path.draw(screen, camera) shows the path. Set Path.show_all = False to
+    hide every path at once (e.g. when your game is finished).
+    """
+
+    show_all = True
+
+    def __init__(self, points, mode="loop", color=(255, 200, 0), colour=None, visible=True):
+        if len(points) < 1:
+            raise ValueError("A Path needs at least one point")
+        self.points = [pg.Vector2(p) for p in points]
+        if mode not in ("loop", "ping_pong", "once"):
+            raise ValueError("mode must be 'loop', 'ping_pong' or 'once'")
+        self.mode = mode
+        self.color = _pick(colour, color)
+        self.visible = visible
+
+    @classmethod
+    def from_tiled(cls, tiled_path, mode=None):
+        """
+        Make a Path from one of TiledMap.paths. The mode comes from (in order):
+        the mode given here, a custom property called "mode" in Tiled, then
+        "loop" for a Polygon or "ping_pong" for a Polyline.
+        """
+        if mode is None:
+            mode = tiled_path.get("properties", {}).get("mode")
+        if mode is None:
+            mode = "loop" if tiled_path.get("closed") else "ping_pong"
+        return cls(tiled_path["points"], mode=mode)
+
+    def __len__(self):
+        return len(self.points)
+
+    def length(self):
+        """Total length in pixels."""
+        total = sum(self.points[i].distance_to(self.points[i + 1])
+                    for i in range(len(self.points) - 1))
+        if self.mode == "loop" and len(self.points) > 2:
+            total += self.points[-1].distance_to(self.points[0])
+        return total
+
+    def draw(self, screen, camera=None, show=None):
+        """Draw the path for debugging (lines, numbered points, direction arrows)."""
+        if show is None:
+            show = Path.show_all and self.visible
+        if not show:
+            return
+        points = [camera.apply_pos(p) if camera else (p.x, p.y) for p in self.points]
+        if len(points) > 1:
+            pg.draw.lines(screen, self.color, self.mode == "loop", points, 2)
+            pairs = list(zip(points, points[1:]))
+            if self.mode == "loop":
+                pairs.append((points[-1], points[0]))
+            for a, b in pairs:                       # small arrow in the middle
+                a, b = pg.Vector2(a), pg.Vector2(b)
+                if a == b:
+                    continue
+                mid = (a + b) / 2
+                d = (b - a).normalize() * 7
+                side = pg.Vector2(-d.y, d.x) * 0.6
+                pg.draw.polygon(screen, self.color, [mid + d, mid - d + side, mid - d - side])
+        font = get_font(None, 18)
+        for i, p in enumerate(points):
+            pg.draw.circle(screen, self.color, p, 6)
+            pg.draw.circle(screen, BLACK, p, 6, 1)
+            label = font.render(str(i), True, BLACK)
+            screen.blit(label, label.get_rect(center=p))
+
+
+# ================================
+# PathFollower Class
+# ================================
+
+class PathFollower:
+    """
+    Moves a sprite along a Path.
+
+    Parameters:
+        sprite  - anything with a .rect (SpriteObject, enemy...)
+        path    - a Path
+        speed   - pixels per second
+        wait    - milliseconds to wait at each point
+        axis    - "both" (top-down games) or "x" (platformers: only follow left /
+                  right, let gravity do up / down)
+        body    - optional PlatformerBody / TopDownBody to move with, so walls
+                  and gravity still work
+        anchor  - which part of the sprite sits on the path: "center" or "midbottom"
+        start   - index of the point to start at
+
+    Attributes:
+        facing   - "left", "right", "up" or "down"
+        finished - True when a "once" path has ended
+        active   - set False to pause
+
+    Example:
+        guard = PathFollower(enemy, level.get_path("guard_route"), speed=120, wait=500)
+        guard.update(tick)      # in update(tick)
+    """
+
+    def __init__(self, sprite, path, speed=100, wait=0, axis="both", body=None,
+                 anchor="center", start=0, snap_to_start=True):
+        self.sprite = sprite
+        self.path = path
+        self.speed = speed
+        self.wait = wait
+        self.axis = axis
+        self.body = body
+        self.anchor = anchor
+        self.index = start
+        self.step_direction = 1          # +1 forwards, -1 backwards (ping_pong)
+        self.finished = False
+        self.active = True
+        self.facing = "right"
+        self._wait_left = 0
+        if snap_to_start and body is None:
+            setattr(sprite.rect, anchor, (round(path.points[start].x),
+                                          round(path.points[start].y)))
+        self._pos = pg.Vector2(getattr(sprite.rect, anchor))
+        if self._pos.distance_to(path.points[start]) < 3:
+            self._advance()          # already at the first point: head for the next
+
+    @property
+    def target(self):
+        return self.path.points[self.index]
+
+    def _advance(self):
+        """Choose the next point."""
+        n = len(self.path.points)
+        if n == 1:
+            return
+        nxt = self.index + self.step_direction
+        if self.path.mode == "loop":
+            self.index = nxt % n
+        elif self.path.mode == "ping_pong":
+            if not 0 <= nxt < n:
+                self.step_direction *= -1
+                nxt = self.index + self.step_direction
+            self.index = nxt
+        else:   # once
+            if nxt >= n:
+                self.finished = True
+            else:
+                self.index = nxt
+
+    def restart(self, index=0):
+        self.index = index
+        self.finished = False
+        self.step_direction = 1
+
+    def update(self, tick):
+        if not self.active or self.finished:
+            if self.body is not None:
+                self.body.move(0)
+            return
+        if self._wait_left > 0:
+            self._wait_left -= tick
+            if self.body is not None:
+                self.body.move(0)
+            return
+
+        here = pg.Vector2(getattr(self.sprite.rect, self.anchor))
+        # Something else moved the sprite (a collision, a body): follow it
+        if here.distance_to(self._pos) > 1.5:
+            self._pos = here
+        target = pg.Vector2(self.target)
+        if self.axis == "x":
+            target.y = self._pos.y
+        to_target = target - self._pos
+        distance = to_target.length()
+        step = self.speed * tick / 1000
+
+        if abs(to_target.x) >= abs(to_target.y):
+            self.facing = "right" if to_target.x > 0 else "left" if to_target.x < 0 else self.facing
+        else:
+            self.facing = "down" if to_target.y > 0 else "up"
+
+        if distance <= max(step, 2):
+            # Reached the point
+            if self.body is None:
+                self._pos = target
+                setattr(self.sprite.rect, self.anchor, (round(target.x), round(target.y)))
+            else:
+                self.body.move(0)
+            self._wait_left = self.wait
+            self._advance()
+            return
+
+        if self.body is not None:
+            # Let the body move (so walls and gravity work)
+            if self.axis == "x" or not hasattr(self.body, "move_towards"):
+                self.body.move(1 if to_target.x > 0 else -1)
+            else:
+                self.body.move_towards(target)
+        else:
+            self._pos += to_target.normalize() * step
+            setattr(self.sprite.rect, self.anchor, (round(self._pos.x), round(self._pos.y)))
+
+    def draw(self, screen, camera=None):
+        """Draw the path (debug)."""
+        self.path.draw(screen, camera)
+
+
+# ================================
+# Patrol Class (simple left / right walking)
+# ================================
+
+class Patrol:
+    """
+    Walks a sprite left and right - the classic platformer enemy.
+
+    Parameters:
+        sprite      - anything with a .rect
+        left, right - x limits (None = no limit, just turn at walls / edges)
+        speed       - pixels per second
+        body        - a PlatformerBody (recommended for platformers)
+        turn_at_walls - turn around when bumping into a wall (needs a body)
+        turn_at_edges - turn around instead of walking off a ledge (needs a body)
+
+    Example:
+        Patrol(slime, body=slime_body, turn_at_edges=True)
+    """
+
+    def __init__(self, sprite, left=None, right=None, speed=80, body=None,
+                 turn_at_walls=True, turn_at_edges=True, start_direction=1):
+        self.sprite = sprite
+        self.left = left
+        self.right = right
+        self.speed = speed
+        self.body = body
+        self.turn_at_walls = turn_at_walls
+        self.turn_at_edges = turn_at_edges
+        self.direction = start_direction
+        self.active = True
+        self._x = float(sprite.rect.x)
+
+    @property
+    def facing(self):
+        return "right" if self.direction > 0 else "left"
+
+    def turn(self):
+        self.direction *= -1
+
+    def update(self, tick):
+        if not self.active:
+            if self.body is not None:
+                self.body.move(0)
+            return
+        r = self.sprite.rect
+        if self.left is not None and r.left <= self.left:
+            self.direction = 1
+        elif self.right is not None and r.right >= self.right:
+            self.direction = -1
+
+        if self.body is not None:
+            touching = self.body.touching
+            if self.turn_at_walls and (("right" in touching and self.direction > 0) or
+                                       ("left" in touching and self.direction < 0)):
+                self.turn()
+            elif self.turn_at_edges and self.body.on_ground and \
+                    not self.body.ground_ahead(self.direction):
+                self.turn()
+            self.body.move(self.direction, speed=self.speed)
+        else:
+            if abs(self._x - r.x) > 1.5:
+                self._x = float(r.x)
+            self._x += self.direction * self.speed * tick / 1000
+            r.x = round(self._x)
+
+
+# ================================
+# Line of sight
+# ================================
+
+def line_of_sight(start, end, solids):
+    """True if nothing in solids (Rects, or things with .rect) blocks the line."""
+    for solid in solids:
+        if _rect_of(solid).clipline(start, end):
+            return False
+    return True
+
+
+# ================================
+# NavGrid Class (path finding)
+# ================================
+
+class NavGrid:
+    """
+    Finds a way around walls (A* path finding) for top-down games.
+
+    Parameters:
+        width, height - size of the world in pixels
+        cell_size     - size of each square (smaller = more accurate, slower)
+        solids        - walls: a list of Rects (or things with .rect)
+        diagonal      - True to allow diagonal moves
+        agent_size    - size of the thing moving: walls are made this much
+                        bigger so it doesn't clip corners
+
+    Example:
+        nav = NavGrid.from_tiled(level, agent_size=28)
+        route = nav.find_path(enemy.rect.center, player.rect.center)   # a Path or None
+        nav.draw(screen, camera)      # debug: shows blocked squares
+    """
+
+    def __init__(self, width, height, cell_size=32, solids=(), diagonal=True, agent_size=0):
+        import math
+        self.cell_size = cell_size
+        self.cols = math.ceil(width / cell_size)       # only cells inside the world
+        self.rows = math.ceil(height / cell_size)
+        self.diagonal = diagonal
+        self.blocked = set()
+        grow = max(0, agent_size - 2)
+        for solid in solids:
+            r = _rect_of(solid).inflate(grow, grow)
+            for c in range(max(0, r.left // cell_size), min(self.cols, r.right // cell_size + 1)):
+                for row in range(max(0, r.top // cell_size), min(self.rows, r.bottom // cell_size + 1)):
+                    cell = pg.Rect(c * cell_size, row * cell_size, cell_size, cell_size)
+                    if cell.colliderect(r):
+                        self.blocked.add((c, row))
+
+    @classmethod
+    def from_tiled(cls, tiled_map, cell_size=None, diagonal=True, agent_size=0, extra_solids=()):
+        """Build a NavGrid from a TiledMap's "collision" objects."""
+        solids = [o["rect"] for o in tiled_map.collision_objects] + list(extra_solids)
+        return cls(tiled_map.width, tiled_map.height, cell_size or tiled_map.tilewidth,
+                   solids, diagonal, agent_size)
+
+    def cell_of(self, pos):
+        return (int(pos[0] // self.cell_size), int(pos[1] // self.cell_size))
+
+    def cell_center(self, cell):
+        return ((cell[0] + 0.5) * self.cell_size, (cell[1] + 0.5) * self.cell_size)
+
+    def is_blocked(self, cell):
+        c, r = cell
+        return not (0 <= c < self.cols and 0 <= r < self.rows) or cell in self.blocked
+
+    def _nearest_open(self, cell):
+        if not self.is_blocked(cell):
+            return cell
+        for radius in range(1, 4):
+            for dc in range(-radius, radius + 1):
+                for dr in range(-radius, radius + 1):
+                    near = (cell[0] + dc, cell[1] + dr)
+                    if not self.is_blocked(near):
+                        return near
+        return None
+
+    def find_path(self, start, goal, max_steps=4000):
+        """
+        Find a route from start to goal (pixel positions).
+        Returns a Path (mode "once") or None if there is no way through.
+        """
+        import heapq
+        start_cell = self._nearest_open(self.cell_of(start))
+        goal_cell = self._nearest_open(self.cell_of(goal))
+        if start_cell is None or goal_cell is None:
+            return None
+        moves = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        if self.diagonal:
+            moves += [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+
+        def guess(cell):
+            """Estimated distance to the goal (A* needs this)."""
+            dx, dy = abs(cell[0] - goal_cell[0]), abs(cell[1] - goal_cell[1])
+            if self.diagonal:
+                return max(dx, dy) + 0.41 * min(dx, dy)
+            return dx + dy
+
+        open_list = [(guess(start_cell), 0, start_cell)]
+        came_from = {start_cell: None}
+        cost = {start_cell: 0}
+        steps = 0
+        while open_list and steps < max_steps:
+            steps += 1
+            _, here_cost, here = heapq.heappop(open_list)
+            if here == goal_cell:
+                break
+            for dc, dr in moves:
+                nxt = (here[0] + dc, here[1] + dr)
+                if self.is_blocked(nxt):
+                    continue
+                if dc and dr and (self.is_blocked((here[0] + dc, here[1])) or
+                                  self.is_blocked((here[0], here[1] + dr))):
+                    continue        # don't cut corners
+                new_cost = here_cost + (1.41 if dc and dr else 1)
+                if new_cost < cost.get(nxt, 10 ** 9):
+                    cost[nxt] = new_cost
+                    came_from[nxt] = here
+                    heapq.heappush(open_list, (new_cost + guess(nxt), new_cost, nxt))
+        if goal_cell not in came_from:
+            return None
+
+        cells = []
+        cell = goal_cell
+        while cell is not None:
+            cells.append(cell)
+            cell = came_from[cell]
+        cells.reverse()
+        points = [self.cell_center(c) for c in cells]
+        points[-1] = goal
+        if len(points) > 1:
+            points[0] = start
+        return Path(points, mode="once", color=(0, 220, 255))
+
+    def draw(self, screen, camera=None):
+        """Debug: shade the blocked squares."""
+        if not Path.show_all:
+            return
+        shade = pg.Surface((self.cell_size, self.cell_size), pg.SRCALPHA)
+        shade.fill((255, 0, 0, 60))
+        for c, r in self.blocked:
+            pos = (c * self.cell_size, r * self.cell_size)
+            screen.blit(shade, camera.apply_pos(pos) if camera else pos)
+
+
+# ================================
+# Chaser Class (detect and chase a target)
+# ================================
+
+class Chaser:
+    """
+    Makes a sprite notice a target (usually the player) and chase it.
+    When the target gets away, it goes back to what it was doing before.
+
+    Parameters:
+        sprite       - the enemy (anything with a .rect)
+        target       - what to chase (anything with a .rect)
+        speed        - chase speed in pixels per second
+        detect_range - starts chasing when the target is this close
+        lose_range   - stops chasing when the target is further than this
+        solids       - walls, used for line of sight (and moving without a body)
+        line_of_sight - True: only notice the target if no wall is in the way
+        nav          - a NavGrid: find a way around walls (top-down games)
+        body         - a PlatformerBody / TopDownBody to move with
+        jump_when_blocked - platformers: jump when a wall is in the way
+        idle         - what to do when not chasing: a PathFollower or Patrol
+                       (or None to stand still)
+        return_home  - True: walk back to where the chase started
+
+    Attributes:
+        state  - "idle", "chase" or "return"
+        can_see_target
+
+    Example:
+        guard_ai = Chaser(guard, player, speed=150, detect_range=200,
+                          nav=nav, solids=walls, idle=guard_path_follower)
+        guard_ai.update(tick)
+        guard_ai.draw_debug(screen, camera)
+    """
+
+    def __init__(self, sprite, target, speed=150, detect_range=200, lose_range=None,
+                 solids=(), line_of_sight=True, nav=None, body=None,
+                 jump_when_blocked=True, idle=None, return_home=True, repath_ms=400):
+        self.sprite = sprite
+        self.target = target
+        self.speed = speed
+        self.detect_range = detect_range
+        self.lose_range = lose_range if lose_range is not None else detect_range * 1.5
+        self.solids = solids
+        self.use_line_of_sight = line_of_sight
+        self.nav = nav
+        self.body = body
+        self.jump_when_blocked = jump_when_blocked
+        self.idle = idle
+        self.return_home = return_home
+        self.repath_ms = repath_ms
+        self.state = "idle"
+        self.can_see_target = False
+        self.active = True
+        self.facing = "right"
+        self._home = None
+        self._route = None
+        self._route_follower = None
+        self._repath_timer = 0
+        self._pos = pg.Vector2(sprite.rect.center)
+
+    def distance(self):
+        return pg.Vector2(self.sprite.rect.center).distance_to(self.target.rect.center)
+
+    def _sees(self):
+        if self.use_line_of_sight and self.solids:
+            return line_of_sight(self.sprite.rect.center, self.target.rect.center, self.solids)
+        return True
+
+    def _move_towards(self, point, tick):
+        """Move one step towards a point (with a body, nav route or straight)."""
+        here = pg.Vector2(self.sprite.rect.center)
+        point = pg.Vector2(point)
+        self.facing = "right" if point.x > here.x else "left"
+        platformer = isinstance(self.body, PlatformerBody)
+
+        if self.nav is not None and not platformer:
+            self._repath_timer -= tick
+            if self._route_follower is None or self._repath_timer <= 0 or \
+                    self._route_follower.finished:
+                self._repath_timer = self.repath_ms
+                route = self.nav.find_path(here, point)
+                self._route = route
+                self._route_follower = PathFollower(self.sprite, route, self.speed,
+                                                    body=self.body, snap_to_start=False) \
+                    if route is not None and len(route) > 1 else None
+            if self._route_follower is not None:
+                self._route_follower.update(tick)
+                return
+
+        if self.body is not None:
+            if platformer:
+                if abs(point.x - here.x) > 4:
+                    direction = 1 if point.x > here.x else -1
+                    self.body.move(direction, speed=self.speed)
+                    blocked = ("right" if direction > 0 else "left") in self.body.touching
+                    if self.jump_when_blocked and blocked and self.body.on_ground:
+                        self.body.jump()
+                else:
+                    self.body.move(0)
+            else:
+                self.body.move_towards(point, speed=self.speed)
+            return
+
+        # No body: move straight, stopping at walls
+        if here.distance_to(self._pos) > 1.5:
+            self._pos = here
+        if self._pos.distance_to(point) > 2:
+            step = (point - self._pos).normalize() * self.speed * tick / 1000
+            old = self.sprite.rect.copy()
+            self._pos += step
+            self.sprite.rect.center = (round(self._pos.x), round(self._pos.y))
+            if any(self.sprite.rect.colliderect(_rect_of(s)) for s in self.solids):
+                self.sprite.rect = old
+                self._pos = pg.Vector2(old.center)
+
+    def update(self, tick):
+        if not self.active:
+            return
+        distance = self.distance()
+        self.can_see_target = distance <= self.lose_range and self._sees()
+
+        if self.state != "chase" and distance <= self.detect_range and self.can_see_target:
+            if self.state == "idle":
+                self._home = self.sprite.rect.center
+            self.state = "chase"
+            self._route_follower = None
+        elif self.state == "chase" and (distance > self.lose_range or not self.can_see_target):
+            self.state = "return" if (self.return_home and self._home) else "idle"
+            self._route_follower = None
+            if self.body is not None:
+                self.body.move(0)
+
+        if self.state == "chase":
+            self._move_towards(self.target.rect.center, tick)
+        elif self.state == "return":
+            here = pg.Vector2(self.sprite.rect.center)
+            close = abs(here.x - self._home[0]) < 6 if isinstance(self.body, PlatformerBody) \
+                else here.distance_to(self._home) < 6
+            if close:
+                self.state = "idle"
+                self._route_follower = None
+                if self.body is not None:
+                    self.body.move(0)
+            else:
+                self._move_towards(self._home, tick)
+        else:
+            if self.idle is not None:
+                self.idle.update(tick)
+                self.facing = getattr(self.idle, "facing", self.facing)
+            elif self.body is not None:
+                self.body.move(0)
+
+    def draw_debug(self, screen, camera=None):
+        """Show the detect / lose ranges, line of sight and the chase route."""
+        if not Path.show_all:
+            return
+        centre = self.sprite.rect.center
+        to_screen = (lambda p: camera.apply_pos(p)) if camera else (lambda p: p)
+        c = to_screen(centre)
+        pg.draw.circle(screen, (255, 200, 0), c, int(self.detect_range), 1)
+        pg.draw.circle(screen, (120, 120, 120), c, int(self.lose_range), 1)
+        colour = (80, 255, 120) if self.can_see_target else (255, 80, 80)
+        pg.draw.line(screen, colour, c, to_screen(self.target.rect.center), 1)
+        if self.state == "chase" and self._route is not None:
+            self._route.draw(screen, camera, show=True)
+        draw_text(screen, self.state, c[0], c[1] - self.sprite.rect.height, fg=(255, 255, 0),
+                  font_size=18, center=True)
+
+
+# ================================
+# Body classes (movement with collisions)
+# ================================
+
+def _nearby(solids, before, after):
+    """
+    The solids that a move from rect `before` to rect `after` could touch, in
+    their original order. pygame checks them all in fast C code, so maps with
+    hundreds of walls stay quick. The results are exactly the same as
+    checking every solid.
+    """
+    area = before.union(after)
+    near = [solids[i] for i in area.collidelistall(solids)]
+    if before.collidelist(near) != -1:
+        return solids            # already stuck in a wall: check everything (v1.0 way)
+    return near
+
+
+class Body:
+    """
+    The base for TopDownBody and PlatformerBody: moves a sprite and stops it
+    going through solids. Movement is done one axis at a time, so things slide
+    along walls instead of sticking.
+
+    Attributes:
+        velocity  - pg.Vector2 in pixels per second
+        touching  - set of sides touching a solid: "left", "right", "top", "bottom"
+        facing    - "left" / "right" (and "up" / "down" for top-down)
+    """
+
+    def __init__(self, sprite, solids=None, speed=200):
+        self.sprite = sprite
+        self.solids = solids if solids is not None else []
+        self.speed = speed
+        self.velocity = pg.Vector2(0, 0)
+        self.touching = set()
+        self.facing = "right"
+        self._pos = pg.Vector2(sprite.rect.topleft)
+        self.push_velocity = pg.Vector2(0, 0)    # knockback, fades away
+        self.push_friction = 6                   # how quickly a push fades
+        self.hitbox = None                       # None = walls use the whole rect
+
+    @property
+    def hitbox_rect(self):
+        """
+        The part of the sprite that bumps into walls, as a Rect in the world.
+        With no hitbox it is the whole sprite rect. With a feet hitbox it is
+        a strip along the bottom of the sprite (see TopDownBody).
+        """
+        return self._collision_box().copy()
+
+    def _collision_box(self):
+        r = self.sprite.rect
+        if self.hitbox is None:
+            return r                             # the v1.0 way: the rect itself
+        if isinstance(self.hitbox, (int, float)):
+            width, height = r.width, self.hitbox
+        else:
+            width, height = self.hitbox
+        width, height = min(int(width), r.width), min(int(height), r.height)
+        box = pg.Rect(0, 0, width, height)
+        box.midbottom = r.midbottom              # the feet: centred along the bottom
+        return box
+
+    def draw_debug(self, screen, camera=None):
+        """Draw the hitbox that bumps into walls (call it when Debug.on, F1)."""
+        box = self.hitbox_rect
+        if camera is not None:
+            box = camera.apply(box)
+        pg.draw.rect(screen, (0, 255, 255), box, 1)
+
+    def push(self, vx, vy=0):
+        """Shove the body (knockback). It slows down by itself."""
+        self.push_velocity += pg.Vector2(vx, vy)
+
+    def _fade_push(self, dt):
+        self.push_velocity *= max(0, 1 - self.push_friction * dt)
+        if self.push_velocity.length() < 5:
+            self.push_velocity.update(0, 0)
+
+    def _sync(self):
+        """If something else moved the sprite (e.g. teleport), follow it."""
+        if (round(self._pos.x), round(self._pos.y)) != self.sprite.rect.topleft:
+            self._pos = pg.Vector2(self.sprite.rect.topleft)
+
+    def set_position(self, x, y):
+        self.sprite.rect.topleft = (x, y)
+        self._pos = pg.Vector2(x, y)
+        self.velocity.update(0, 0)
+
+    def _solid_rects(self):
+        return [_rect_of(s) for s in self.solids]
+
+    def move_and_collide(self, dx, dy, extra_y_check=None):
+        """Move by dx, dy pixels, stopping at solids. Fills in self.touching."""
+        self.touching = set()
+        r = self.sprite.rect
+        solids = self._solid_rects()
+        # box = the part that hits walls: the whole rect, or just the feet.
+        # off = how far the box is from the rect's top-left (it moves with it)
+        box = self._collision_box()
+        off_x, off_y = box.x - r.x, box.y - r.y
+
+        self._pos.x += dx
+        before = box.copy()
+        box.x = round(self._pos.x) + off_x
+        for s in _nearby(solids, before, box):
+            if box.colliderect(s):
+                if dx > 0:
+                    box.right = s.left
+                    self.touching.add("right")
+                elif dx < 0:
+                    box.left = s.right
+                    self.touching.add("left")
+                self._pos.x = box.x - off_x
+                self.velocity.x = 0
+
+        old_bottom = r.bottom
+        self._pos.y += dy
+        before = box.copy()
+        box.y = round(self._pos.y) + off_y
+        for s in _nearby(solids, before, box):
+            if box.colliderect(s):
+                if dy > 0:
+                    box.bottom = s.top
+                    self.touching.add("bottom")
+                elif dy < 0:
+                    box.top = s.bottom
+                    self.touching.add("top")
+                self._pos.y = box.y - off_y
+                self.velocity.y = 0
+        if box is not r:                         # move the sprite with its feet
+            r.topleft = (box.x - off_x, box.y - off_y)
+        if extra_y_check:
+            extra_y_check(old_bottom, dy)
+
+
+class TopDownBody(Body):
+    """
+    Movement with collisions for top-down games (RPGs, twin-stick shooters).
+
+    Parameters:
+        sprite  - anything with a .rect
+        solids  - walls: Rects or things with .rect
+        speed   - pixels per second
+        normalize_diagonal - True: moving diagonally isn't faster
+        hitbox  - the part of the sprite that bumps into walls:
+                  None (default) - the whole sprite rect (the v1.0 way)
+                  10             - only the FEET: a strip 10 pixels tall
+                                   along the bottom of the sprite, as wide
+                                   as the sprite
+                  (16, 8)        - a feet strip 16 wide and 8 tall, centred
+                                   along the bottom of the sprite
+        hitbox_offset - move the feet hitbox from its default position
+
+    Example:
+        body = TopDownBody(player, solids=walls, speed=200)
+        body.move(dx, dy)          # -1, 0 or 1 each, e.g. from KeyboardInput
+        body.update(tick)
+
+    Feet hitbox (walking in front of and behind things):
+        In a top-down game the picture shows a person standing up, but only
+        their feet touch the ground. With hitbox=10 only the feet stop at
+        walls, so the head can overlap a fence, sign or tree. Give those
+        things a collision box over their BASE only (in Tiled), and use
+        World(..., y_sort=True). Coming from below, the feet stop under the
+        base, so the player is lower and drawn in front. Coming from above,
+        the feet stop above it, so the player is drawn behind.
+        sprite.rect does not change: it is still used for drawing, pickups,
+        bullets and collides_with(). body.hitbox_rect is the feet as a Rect,
+        and body.draw_debug(screen, camera) draws it (F1).
+    """
+
+    def __init__(self, sprite, solids=None, speed=200, normalize_diagonal=True,
+                 hitbox=None, hitbox_offset=(0, 0)):
+        super().__init__(sprite, solids, speed)
+        self.hitbox = hitbox
+        self.hitbox_offset = pg.Vector2(hitbox_offset)
+        self.normalize_diagonal = normalize_diagonal
+        self._direction = pg.Vector2(0, 0)
+        self._speed_now = speed
+
+    def _collision_box(self):
+        box = super()._collision_box()
+        if self.hitbox is not None:
+            box.move_ip(self.hitbox_offset)
+        return box
+
+    def move(self, dx, dy=0, speed=None):
+        """Set the direction to move this frame (-1, 0 or 1 for each)."""
+        self._direction = pg.Vector2(dx, dy)
+        self._speed_now = speed if speed is not None else self.speed
+
+    def move_towards(self, point, speed=None):
+        """Head towards a point (with a feet hitbox, the feet head there)."""
+        here = self.sprite.rect.center if self.hitbox is None else self.hitbox_rect.center
+        d = pg.Vector2(point) - pg.Vector2(here)
+        if d.length() < 2:
+            self.move(0, 0)
+        else:
+            d = d.normalize()
+            self.move(d.x, d.y, speed)
+
+    def update(self, tick):
+        self._sync()
+        direction = pg.Vector2(self._direction)
+        if self.normalize_diagonal and direction.length() > 1:
+            direction = direction.normalize()
+        self.velocity = direction * self._speed_now
+        if direction.length():
+            if abs(direction.x) >= abs(direction.y):
+                self.facing = "right" if direction.x > 0 else "left"
+            else:
+                self.facing = "down" if direction.y > 0 else "up"
+        dt = tick / 1000
+        self.velocity += self.push_velocity
+        self._fade_push(dt)
+        self.move_and_collide(self.velocity.x * dt, self.velocity.y * dt)
+
+
+class PlatformerBody(Body):
+    """
+    Gravity, jumping, platforms and ladders for platform games.
+
+    Parameters:
+        sprite      - anything with a .rect
+        solids      - walls and floors (Rects or things with .rect)
+        platforms   - one-way platforms: jump up through them, stand on top,
+                      press down to drop through. MovingPlatforms go here too.
+        ladders     - Rects you can climb
+        move_speed  - walking speed (pixels per second)
+        gravity     - how fast you speed up when falling (pixels per second²)
+        max_fall    - fastest falling speed
+        jump_speed  - how hard you jump
+        max_jumps   - 2 for a double jump
+        coyote_ms   - you can still jump this long after walking off a ledge
+        jump_buffer_ms - a jump pressed this long before landing still happens
+        climb_speed - ladder speed
+        acceleration - None = start / stop instantly, or e.g. 2000 for a slide
+
+    Use (every frame):
+        body.move(direction)        # -1 left, 0 stop, 1 right
+        body.climb(direction)       # -1 up, 1 down (only on ladders)
+        body.jump()                 # e.g. when keys.was_pressed("jump")
+        body.release_jump()         # e.g. when keys.was_released("jump") - small hop
+        body.drop_down()            # fall through a one-way platform
+        body.update(tick)
+
+    Attributes: on_ground, on_ladder, climbing, velocity, touching, facing
+    """
+
+    def __init__(self, sprite, solids=None, platforms=None, ladders=None,
+                 move_speed=250, gravity=1800, max_fall=900, jump_speed=650,
+                 max_jumps=1, coyote_ms=100, jump_buffer_ms=120, climb_speed=160,
+                 acceleration=None):
+        super().__init__(sprite, solids, move_speed)
+        self.platforms = platforms if platforms is not None else []
+        self.ladders = ladders if ladders is not None else []
+        self.gravity = gravity
+        self.max_fall = max_fall
+        self.jump_speed = jump_speed
+        self.max_jumps = max_jumps
+        self.coyote_ms = coyote_ms
+        self.jump_buffer_ms = jump_buffer_ms
+        self.climb_speed = climb_speed
+        self.acceleration = acceleration
+
+        self.on_ground = False
+        self.on_ladder = False
+        self.climbing = False
+        self.standing_on = None       # the platform / MovingPlatform underneath
+        self._move_dir = 0
+        self._move_speed_now = move_speed
+        self._climb_dir = 0
+        self._coyote = 0
+        self._jump_buffer = 0
+        self._jumps_used = 0
+        self._drop_timer = 0
+
+    # ---- controls ----
+    def move(self, direction, speed=None):
+        self._move_dir = max(-1, min(1, direction))
+        self._move_speed_now = speed if speed is not None else self.speed
+
+    def climb(self, direction):
+        self._climb_dir = max(-1, min(1, direction))
+
+    def jump(self):
+        self._jump_buffer = self.jump_buffer_ms
+
+    def release_jump(self, cut=0.45):
+        """Let go of jump early for a smaller jump."""
+        if self.velocity.y < 0:
+            self.velocity.y *= cut
+
+    def drop_down(self):
+        if self.standing_on is not None and self.standing_on in self.platforms:
+            self._drop_timer = 200
+
+    # ---- checks ----
+    def ground_ahead(self, direction, distance=4):
+        """True if there is ground just ahead (used to stop at ledge edges)."""
+        r = self.sprite.rect
+        x = r.right + distance if direction > 0 else r.left - distance - 1
+        probe = pg.Rect(x, r.bottom, 1, 4)
+        return any(probe.colliderect(s) for s in self._solid_rects() + self._platform_rects())
+
+    def _platform_rects(self):
+        return [_rect_of(p) for p in self.platforms]
+
+    def _ladder_here(self):
+        r = self.sprite.rect
+        middle = pg.Rect(r.centerx - 2, r.top, 4, r.height + 2)
+        for ladder in self.ladders:
+            lr = _rect_of(ladder)
+            if middle.colliderect(lr):
+                return lr
+        return None
+
+    def _land_on_platforms(self, old_bottom, dy):
+        """One-way platforms: only stop when falling onto the top."""
+        r = self.sprite.rect
+        if dy < 0 or self._drop_timer > 0 or self.climbing:
+            return
+        for platform in self.platforms:
+            pr = _rect_of(platform)
+            if r.colliderect(pr) and old_bottom <= pr.top + 1:
+                r.bottom = pr.top
+                self._pos.y = r.y
+                self.velocity.y = 0
+                self.touching.add("bottom")
+                self.standing_on = platform
+
+    # ---- update ----
+    def update(self, tick):
+        self._sync()
+        dt = tick / 1000
+        self._jump_buffer -= tick
+        self._coyote -= tick
+        self._drop_timer -= tick
+
+        # Ride moving platforms
+        if self.standing_on is not None and hasattr(self.standing_on, "delta"):
+            self._pos += self.standing_on.delta
+            self.sprite.rect.topleft = (round(self._pos.x), round(self._pos.y))
+
+        # Ladders
+        ladder = self._ladder_here()
+        self.on_ladder = ladder is not None
+        if not self.on_ladder:
+            self.climbing = False
+        elif self._climb_dir != 0:
+            self.climbing = True
+            self.sprite.rect.centerx = ladder.centerx      # line up with the ladder
+            self._pos.x = self.sprite.rect.x
+
+        # Sideways
+        target_vx = self._move_dir * self._move_speed_now
+        if self.acceleration:
+            change = self.acceleration * dt
+            self.velocity.x += max(-change, min(change, target_vx - self.velocity.x))
+        else:
+            self.velocity.x = target_vx
+        if self._move_dir:
+            self.facing = "right" if self._move_dir > 0 else "left"
+        # Knockback: sideways push fades, an upward push is a one-off bounce
+        self.velocity.x += self.push_velocity.x
+        if self.push_velocity.y:
+            self.velocity.y = self.push_velocity.y
+            self.push_velocity.y = 0
+        self._fade_push(dt)
+
+        # Up / down
+        if self.climbing:
+            self.velocity.y = self._climb_dir * self.climb_speed
+            self._jumps_used = 0
+        else:
+            self.velocity.y = min(self.max_fall, self.velocity.y + self.gravity * dt)
+
+        # Jumping (buffer + coyote time + extra jumps)
+        if self._jump_buffer > 0:
+            if self.on_ground or self._coyote > 0 or self.climbing:
+                allowed = True
+                self._jumps_used = 0
+            else:
+                # In the air: falling off a ledge uses up the first jump
+                self._jumps_used = max(self._jumps_used, 1)
+                allowed = self._jumps_used < self.max_jumps
+            if allowed:
+                self.velocity.y = -self.jump_speed
+                self._jumps_used += 1
+                self._jump_buffer = 0
+                self._coyote = 0
+                self.climbing = False
+
+        was_on_ground = self.on_ground
+        self.standing_on = None
+        self.move_and_collide(self.velocity.x * dt, self.velocity.y * dt,
+                              extra_y_check=self._land_on_platforms)
+        # Standing still, gravity moves us less than a pixel each frame, so also
+        # check the pixel just below our feet
+        if "bottom" not in self.touching and self.velocity.y >= 0:
+            feet = pg.Rect(self.sprite.rect.x, self.sprite.rect.bottom, self.sprite.rect.width, 1)
+            if feet.collidelist(self._solid_rects()) != -1:
+                self.touching.add("bottom")
+            else:
+                if self._drop_timer <= 0 and not self.climbing:
+                    for platform in self.platforms:
+                        pr = _rect_of(platform)
+                        if feet.colliderect(pr) and self.sprite.rect.bottom == pr.top:
+                            self.touching.add("bottom")
+                            self.standing_on = platform
+                            break
+        self.on_ground = "bottom" in self.touching
+        if self.on_ground:
+            if self.velocity.y > 0:
+                self.velocity.y = 0          # don't build up falling speed while standing
+            self._coyote = self.coyote_ms
+            self._jumps_used = 0
+            if self.standing_on is None:
+                feet = pg.Rect(self.sprite.rect.x, self.sprite.rect.bottom,
+                               self.sprite.rect.width, 1)
+                index = feet.collidelist(self._solid_rects())
+                self.standing_on = list(self.solids)[index] if index != -1 else None
+        elif was_on_ground and self.velocity.y >= 0:
+            self._coyote = self.coyote_ms         # just walked off a ledge
+        # Controls only last one frame: call move() / climb() every frame
+        self._move_dir = 0
+        self._climb_dir = 0
+
+
+class MovingPlatform(SpriteObject):
+    """
+    A platform that follows a Path and carries anything standing on it.
+    Put it in a PlatformerBody's platforms (one-way) or solids list, and
+    update it BEFORE the bodies that stand on it. The middle of the
+    platform follows the path.
+
+        lift = MovingPlatform(300, 400, 96, 16, path=level.get_path("lift"), speed=80)
+        lift.update(tick)
+    """
+
+    def __init__(self, x, y, width, height, path, speed=80, wait=300, image=None,
+                 bg=(150, 110, 70)):
+        super().__init__(x, y, width, height, image=image, bg=bg)
+        self.follower = PathFollower(self, path, speed, wait)
+        self.delta = pg.Vector2(0, 0)
+
+    def update(self, tick):
+        before = pg.Vector2(self.rect.topleft)
+        self.follower.update(tick)
+        super().update(tick)
+        self.delta = pg.Vector2(self.rect.topleft) - before
+
+
+# ================================
+# Tooltip Class
+# ================================
+
+class Tooltip:
+    """
+    A small box of text that appears when the mouse rests on something.
+    Works with anything that has a .rect (widgets, sprites, DragObjects...).
+
+        tips = Tooltip()
+        tips.attach(play_button, "Start a new game")
+        tips.attach(sword, lambda item: f"{item.name}\\nDamage: {item.stats['damage']}")
+
+        tips.update(tick)        # in update(tick)
+        tips.draw(screen)        # LAST in draw_game(), so it is on top
+
+    The text can be a string, or a function that is given the object and
+    returns the text (so it can show stats that change).
+
+    Parameters: delay (ms before it shows), width, fg, bg, border_color,
+    font_name, font_size, font_style, padding
+    """
+
+    def __init__(self, delay=400, width=220, fg=WHITE, bg=(20, 20, 30),
+                 border_color=(200, 200, 200), border_colour=None,
+                 font_name=None, font_size=20, padding=8, font_style=None):
+        self.delay = delay
+        self.width = width
+        self.fg = fg
+        self.bg = bg
+        self.border_color = _pick(border_colour, border_color)
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.padding = padding
+        self.targets = []           # list of (object, text or function)
+        self.current = None
+        self._timer = 0
+        self._last_mouse = None
+
+    def attach(self, target, text):
+        """Show text when the mouse is over target."""
+        self.targets.append((target, text))
+
+    def detach(self, target):
+        self.targets = [(t, x) for t, x in self.targets if t is not target]
+
+    def _rect(self, target):
+        if hasattr(target, "get_rect") and isinstance(target, Widget):
+            return target.get_rect(target._last_offset)
+        return _rect_of(target)
+
+    def _text_for(self, target, text):
+        return text(target) if callable(text) else str(text)
+
+    def update(self, tick):
+        mouse = pg.mouse.get_pos()
+        hovered = None
+        for target, text in reversed(self.targets):
+            if getattr(target, "visible", True) and not getattr(target, "dragging", False) \
+                    and self._rect(target).collidepoint(mouse):
+                hovered = (target, text)
+                break
+        if hovered is None or (self.current and hovered[0] is not self.current[0]):
+            self._timer = 0
+        if hovered is not None:
+            self._timer += tick
+        self.current = hovered
+
+    def draw(self, screen):
+        if self.current is None or self._timer < self.delay:
+            return
+        target, text = self.current
+        words = self._text_for(target, text)
+        if not words:
+            return
+        box = Message(0, 0, words, width=self.width, fg=self.fg, bg=self.bg,
+                      font_name=self.font_name, font_size=self.font_size,
+                      padding=self.padding, font_style=self.font_style)
+        # Fit the box to the text, and keep it on screen
+        font = get_font(self.font_name, self.font_size, self.font_style)
+        widest = max(font.size(line)[0] for line in box._lines())
+        box.width = min(self.width, widest + self.padding * 2)
+        box._refresh()
+        mx, my = pg.mouse.get_pos()
+        x, y = mx + 16, my + 16
+        sw, sh = screen.get_size()
+        if x + box.width > sw:
+            x = mx - box.width - 8
+        if y + box.height > sh:
+            y = my - box.height - 8
+        box.x, box.y = max(0, x), max(0, y)
+        box.draw(screen)
+        if self.border_color:
+            pg.draw.rect(screen, self.border_color, box.get_rect(), 1)
+
+
+# ================================
+# Timers: after(), after_repeat(), Countdown  (like tkinter's root.after)
+# ================================
+
+_timers = {}              # id -> timer details
+_timer_next_id = [1]
+_timer_scene = [None]     # the scene timers belong to (set by Scenes)
+_timer_pause = {"since": None, "total": 0}
+
+
+def _now():
+    """Game time in ms (stops while timers are paused)."""
+    paused = _timer_pause["total"]
+    if _timer_pause["since"] is not None:
+        paused += pg.time.get_ticks() - _timer_pause["since"]
+    return pg.time.get_ticks() - paused
+
+
+def after(ms, function, *args):
+    """
+    Run function(*args) once, ms milliseconds from now. Returns an id.
+        after(2000, spawn_enemy)
+    Needs update_timers() every frame (Scenes does this for you).
+    """
+    timer_id = _timer_next_id[0]
+    _timer_next_id[0] += 1
+    _timers[timer_id] = {"due": _now() + ms, "every": None, "function": function,
+                         "args": args, "times": 1, "scene": _timer_scene[0]}
+    return timer_id
+
+
+def after_repeat(ms, function, *args, times=None):
+    """
+    Run function(*args) every ms milliseconds (forever, or `times` times).
+        blink_id = after_repeat(500, blink)
+    """
+    timer_id = after(ms, function, *args)
+    _timers[timer_id]["every"] = ms
+    _timers[timer_id]["times"] = times
+    return timer_id
+
+
+def after_cancel(timer_id):
+    """Stop a timer made by after() / after_repeat()."""
+    _timers.pop(timer_id, None)
+
+
+def cancel_all_timers(scene=None):
+    """Stop every timer (or only the ones made in one scene)."""
+    for timer_id in [t for t, info in _timers.items() if scene is None or info["scene"] == scene]:
+        del _timers[timer_id]
+
+
+def pause_timers():
+    if _timer_pause["since"] is None:
+        _timer_pause["since"] = pg.time.get_ticks()
+
+
+def resume_timers():
+    if _timer_pause["since"] is not None:
+        _timer_pause["total"] += pg.time.get_ticks() - _timer_pause["since"]
+        _timer_pause["since"] = None
+
+
+def update_timers(tick=0):
+    """Run any timers that are due. Call once per frame (Scenes does it for you)."""
+    if _timer_pause["since"] is not None:
+        return
+    now = _now()
+    for timer_id in list(_timers):
+        info = _timers.get(timer_id)
+        if info is None or now < info["due"]:
+            continue
+        if info["every"]:
+            info["due"] += info["every"]
+            if info["times"] is not None:
+                info["times"] -= 1
+                if info["times"] <= 0:
+                    del _timers[timer_id]
+        else:
+            del _timers[timer_id]
+        info["function"](*info["args"])
+
+
+class Countdown:
+    """
+    A countdown timer, e.g. a 60 second level timer.
+
+        level_timer = Countdown(60000, on_finish=time_up)
+        level_timer.seconds_left()     # 59.2
+        level_timer.text()             # "0:59"
+        level_timer.pause()   level_timer.resume()   level_timer.restart()
+
+    on_finish runs once when it reaches 0 (needs update_timers() / Scenes).
+    """
+
+    def __init__(self, ms, on_finish=None, start=True):
+        self.length = ms
+        self.on_finish = on_finish
+        self.finished = False
+        self._left_when_paused = ms
+        self._end = None
+        self._timer_id = None
+        if start:
+            self.restart()
+
+    def restart(self, ms=None):
+        if ms is not None:
+            self.length = ms
+        self.finished = False
+        self._end = _now() + self.length
+        self._schedule()
+
+    def _schedule(self):
+        if self._timer_id is not None:
+            after_cancel(self._timer_id)
+        self._timer_id = after(max(0, self.time_left()), self._finish)
+
+    def _finish(self):
+        self.finished = True
+        self._timer_id = None
+        if self.on_finish:
+            self.on_finish()
+
+    def time_left(self):
+        """Milliseconds left."""
+        if self._end is None:
+            return self._left_when_paused
+        return max(0, self._end - _now())
+
+    def seconds_left(self):
+        return self.time_left() / 1000
+
+    def fraction_left(self):
+        return 0 if not self.length else self.time_left() / self.length
+
+    def text(self):
+        """Time left as minutes:seconds, e.g. "1:05"."""
+        seconds = int(-(-self.time_left() // 1000))      # round up
+        return f"{seconds // 60}:{seconds % 60:02d}"
+
+    def pause(self):
+        if self._end is not None:
+            self._left_when_paused = self.time_left()
+            self._end = None
+            if self._timer_id is not None:
+                after_cancel(self._timer_id)
+                self._timer_id = None
+
+    def resume(self):
+        if self._end is None and not self.finished:
+            self._end = _now() + self._left_when_paused
+            self._schedule()
+
+    def add_time(self, ms):
+        """Add (or take away, with a negative number) time."""
+        if self._end is None:
+            self._left_when_paused += ms
+        else:
+            self._end += ms
+            self._schedule()
+
+
+# ================================
+# Scenes (menu -> game -> game over)
+# ================================
+
+class Scene:
+    """
+    One screen of your game (menu, level, game over...). Make your own by
+    writing a class with any of these methods:
+
+        class GameOver(Scene):
+            def start(self, score=0):        # runs each time the scene opens
+                self.score = score
+            def handle_event(self, event): ...
+            def update(self, tick): ...
+            def draw(self, screen): ...
+            def stop(self): ...              # runs when leaving the scene
+
+    self.scenes is the Scenes manager, so you can call
+    self.scenes.switch("menu") from inside a scene.
+    """
+
+    scenes = None
+
+    def start(self, **data):
+        pass
+
+    def stop(self):
+        pass
+
+    def handle_event(self, event):
+        pass
+
+    def update(self, tick):
+        pass
+
+    def draw(self, screen):
+        pass
+
+
+class _FunctionScene(Scene):
+    """A Scene made from plain functions (see Scenes.add)."""
+
+    def __init__(self, start=None, handle_event=None, update=None, draw=None, stop=None):
+        self._start, self._handle_event = start, handle_event
+        self._update, self._draw, self._stop = update, draw, stop
+
+    def start(self, **data):
+        if self._start:
+            self._start(**data)
+
+    def stop(self):
+        if self._stop:
+            self._stop()
+
+    def handle_event(self, event):
+        if self._handle_event:
+            self._handle_event(event)
+
+    def update(self, tick):
+        if self._update:
+            self._update(tick)
+
+    def draw(self, screen):
+        if self._draw:
+            self._draw(screen)
+
+
+class Scenes:
+    """
+    Switches between the screens of your game, with optional fades.
+
+    With functions:
+        scenes = Scenes()
+        scenes.add("menu", start=menu_start, handle_event=menu_event,
+                   update=menu_update, draw=menu_draw)
+    With classes:
+        scenes.add("game", GameScene())
+
+    In your game loop:
+        scenes.handle_event(event)     # in handle_inputs()
+        scenes.update(tick)            # in update(tick) - also runs after() timers
+        scenes.draw(screen)            # in draw_game()
+
+    Change scene (data is passed to the new scene's start()):
+        scenes.switch("game_over", transition="fade", ms=500, score=score)
+
+    transition: None, "fade", "slide_left", "slide_right", "slide_up", "slide_down"
+    Timers made with after() inside a scene stop when you leave it.
+    Cursor.set() and Cursor.attach() made inside a scene are undone when you leave it.
+    """
+
+    def __init__(self):
+        self.scenes = {}
+        self.current = None
+        self.current_name = None
+        self._transition = None
+
+    def add(self, name, scene=None, start=None, handle_event=None, update=None,
+            draw=None, stop=None):
+        """Add a scene: a Scene object, or functions for each part."""
+        if scene is None:
+            scene = _FunctionScene(start, handle_event, update, draw, stop)
+        scene.scenes = self
+        self.scenes[name] = scene
+        if self.current is None:
+            self._enter(name, {})
+        return scene
+
+    def _enter(self, name, data):
+        if name not in self.scenes:
+            raise ValueError(f"No scene called '{name}'. Scenes: {', '.join(self.scenes)}")
+        if self.current is not None:
+            self.current.stop()
+            cancel_all_timers(scene=self.current_name)
+            Cursor._scene_ended(self.current_name)
+        self.current_name = name
+        self.current = self.scenes[name]
+        _timer_scene[0] = name
+        self.current.start(**data)
+
+    def switch(self, name, transition=None, ms=400, **data):
+        """Go to another scene, e.g. switch("game", transition="fade", level=2)."""
+        if transition is None or ms <= 0:
+            self._enter(name, data)
+            return
+        self._transition = {"to": name, "data": data, "kind": transition, "ms": ms,
+                            "time": 0, "switched": False, "snapshot": None}
+
+    @property
+    def transitioning(self):
+        return self._transition is not None
+
+    def handle_event(self, event):
+        if self.current is not None and self._transition is None:
+            self.current.handle_event(event)
+
+    def update(self, tick):
+        update_timers(tick)
+        t = self._transition
+        if t is not None:
+            t["time"] += tick
+            if t["kind"] == "fade":
+                if not t["switched"] and t["time"] >= t["ms"] / 2:
+                    self._enter(t["to"], t["data"])
+                    t["switched"] = True
+            elif not t["switched"]:
+                self._enter(t["to"], t["data"])
+                t["switched"] = True
+            if t["time"] >= t["ms"]:
+                self._transition = None
+        if self.current is not None:
+            self.current.update(tick)
+
+    def draw(self, screen):
+        t = self._transition
+        if t is not None and t["kind"] != "fade" and t["snapshot"] is None:
+            # Remember the old scene's picture for sliding
+            t["snapshot"] = screen.copy()
+        if self.current is not None:
+            self.current.draw(screen)
+        if t is None:
+            return
+        progress = min(1, t["time"] / t["ms"])
+        if t["kind"] == "fade":
+            darkness = progress * 2 if progress < 0.5 else (1 - progress) * 2
+            cover = pg.Surface(screen.get_size())
+            cover.fill(BLACK)
+            cover.set_alpha(int(255 * darkness))
+            screen.blit(cover, (0, 0))
+        elif t["snapshot"] is not None:
+            w, h = screen.get_size()
+            move = {"slide_left": (-w, 0), "slide_right": (w, 0),
+                    "slide_up": (0, -h), "slide_down": (0, h)}.get(t["kind"], (-w, 0))
+            old_pos = (move[0] * progress, move[1] * progress)
+            screen.blit(t["snapshot"], old_pos)
+
+
+# ================================
+# Saving and loading
+# ================================
+
+def game_folder():
+    """The folder your game's main .py file is in (save files go here)."""
+    import os
+    import sys
+    main = sys.argv[0] if sys.argv and sys.argv[0] else ""
+    return os.path.dirname(os.path.abspath(main)) if main else os.getcwd()
+
+
+def _save_path(filename):
+    import os
+    return filename if os.path.isabs(filename) else os.path.join(game_folder(), filename)
+
+
+def _plain(value):
+    """Turn Variables (IntVar...) into plain values so they can be saved."""
+    if isinstance(value, Variable):
+        return value.get()
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    return value
+
+
+def save_data(filename, data=None, **values):
+    """
+    Save values to a file next to your game.
+        save_data("save.json", level=3, coins=coins, volume=volume_var)
+    Variables (IntVar etc.) are saved as their values.
+    """
+    import json
+    everything = dict(data or {})
+    everything.update(values)
+    with open(_save_path(filename), "w") as f:
+        json.dump(_plain(everything), f, indent=2)
+
+
+def load_data(filename, default=None):
+    """
+    Load a file saved with save_data(). If it is missing or broken you get
+    `default` instead (the game never crashes because of a save file).
+        data = load_data("save.json", default={"level": 1, "coins": 0})
+    Missing values are filled in from default.
+    """
+    import json
+    result = dict(default or {})
+    try:
+        with open(_save_path(filename)) as f:
+            loaded = json.load(f)
+        if isinstance(loaded, dict):
+            result.update(loaded)
+    except FileNotFoundError:
+        pass
+    except (ValueError, OSError) as error:
+        print(f"Couldn't read {filename} ({error}) - using the default values")
+    return result
+
+
+def save_variables(filename, **variables):
+    """Save Variables, e.g. save_variables("settings.json", volume=volume, music=music_on)."""
+    save_data(filename, **variables)
+
+
+def load_variables(filename, **variables):
+    """Load saved values back into Variables (any that are missing are left alone)."""
+    data = load_data(filename)
+    for name, variable in variables.items():
+        if name in data:
+            variable.set(data[name])
+
+
+class HighScores:
+    """
+    A saved high-score table.
+
+        scores = HighScores("scores.json", keep=10)
+        if scores.is_high_score(score):
+            scores.add(name, score)          # saved straight away
+        for line in scores.table():          # ["1. Sam  120", "2. Alex  95", ...]
+            ...
+        scores.best()                        # ("Sam", 120) or None
+
+    lower_is_better=True for times (e.g. a speed run).
+    """
+
+    def __init__(self, filename="scores.json", keep=10, lower_is_better=False):
+        self.filename = filename
+        self.keep = keep
+        self.lower_is_better = lower_is_better
+        self.scores = [tuple(s) for s in load_data(filename, {"scores": []})["scores"]
+                       if isinstance(s, (list, tuple)) and len(s) == 2]
+        self._sort()
+
+    def _sort(self):
+        self.scores.sort(key=lambda s: s[1], reverse=not self.lower_is_better)
+        del self.scores[self.keep:]
+
+    def is_high_score(self, score):
+        if len(self.scores) < self.keep:
+            return True
+        worst = self.scores[-1][1]
+        return score < worst if self.lower_is_better else score > worst
+
+    def add(self, name, score):
+        """Add a score. Returns its place (1 = top) or None if it didn't make the table."""
+        if not self.is_high_score(score):
+            return None
+        entry = (str(name), score)
+        self.scores.append(entry)
+        self._sort()
+        self.save()
+        return self.scores.index(entry) + 1 if entry in self.scores else None
+
+    def best(self):
+        return self.scores[0] if self.scores else None
+
+    def table(self):
+        return [f"{i}. {name}  {score}" for i, (name, score) in enumerate(self.scores, 1)]
+
+    def clear(self):
+        self.scores = []
+        self.save()
+
+    def save(self):
+        save_data(self.filename, scores=[list(s) for s in self.scores])
+
+
+# ================================
+# Health Class
+# ================================
+
+class Health:
+    """
+    Hit points for anything (player, enemy, crate...).
+
+    Parameters:
+        maximum       - most health
+        value         - starting health (default: full)
+        invincible_ms - after taking damage, ignore more damage for this long
+        on_damage, on_heal, on_death - functions to run (no arguments)
+        bar           - a Progressbar to keep up to date
+        regen_per_second - slowly heal (needs update(tick))
+
+    Example:
+        player.health = Health(100, invincible_ms=800, on_death=game_over, bar=health_bar)
+        player.health.damage(10)
+        if player.health.is_dead(): ...
+
+    A small bar floating above an enemy (moves with it and the camera):
+        enemy.health.draw_bar(screen, enemy, camera)     # in draw_game()
+    """
+
+    def __init__(self, maximum=100, value=None, invincible_ms=0, on_damage=None,
+                 on_heal=None, on_death=None, bar=None, regen_per_second=0):
+        self.maximum = maximum
+        self.value = maximum if value is None else value
+        self.invincible_ms = invincible_ms
+        self.on_damage = on_damage
+        self.on_heal = on_heal
+        self.on_death = on_death
+        self.bar = bar
+        self.regen_per_second = regen_per_second
+        self._invincible_until = 0
+        self._dead_reported = False
+        self._update_bar()
+
+    def _update_bar(self):
+        if self.bar is not None:
+            self.bar.maximum = self.maximum
+            self.bar.value = self.value
+
+    @property
+    def invincible(self):
+        return pg.time.get_ticks() < self._invincible_until
+
+    def fraction(self):
+        return self.value / self.maximum if self.maximum else 0
+
+    def is_dead(self):
+        return self.value <= 0
+
+    def damage(self, amount):
+        """Take damage. Returns True if it hurt (False while invincible or dead)."""
+        if amount <= 0 or self.invincible or self.is_dead():
+            return False
+        self.value = max(0, self.value - amount)
+        self._invincible_until = pg.time.get_ticks() + self.invincible_ms
+        self._update_bar()
+        if self.on_damage:
+            self.on_damage()
+        if self.is_dead() and not self._dead_reported:
+            self._dead_reported = True
+            if self.on_death:
+                self.on_death()
+        return True
+
+    def heal(self, amount):
+        if self.is_dead() or amount <= 0:
+            return
+        self.value = min(self.maximum, self.value + amount)
+        self._update_bar()
+        if self.on_heal:
+            self.on_heal()
+
+    def reset(self):
+        """Back to full health."""
+        self.value = self.maximum
+        self._dead_reported = False
+        self._invincible_until = 0
+        self._update_bar()
+
+    def make_invincible(self, ms):
+        self._invincible_until = pg.time.get_ticks() + ms
+
+    def update(self, tick):
+        if self.regen_per_second and not self.is_dead() and self.value < self.maximum:
+            self.value = min(self.maximum, self.value + self.regen_per_second * tick / 1000)
+            self._update_bar()
+
+    def draw_bar(self, screen, sprite, camera=None, width=None, height=6, gap=6,
+                 hide_when_full=False, **bar_options):
+        """
+        Draw a small health bar centred above sprite (anything with a .rect).
+
+            for enemy in enemies:
+                enemy.health.draw_bar(screen, enemy, camera)
+
+        width          - bar width (None = as wide as the sprite)
+        height         - bar thickness
+        gap            - space between the bar and the top of the sprite
+        hide_when_full - True: only show the bar once it has been hurt
+        Any Progressbar option also works, e.g. low_color=(255, 0, 0),
+        animate=True, bar_color=(255, 200, 0).
+        """
+        if hide_when_full and self.value >= self.maximum:
+            return
+        rect = camera.apply(sprite.rect) if camera else sprite.rect
+        width = width or rect.width
+        bar = getattr(self, "_floating_bar", None)
+        if bar is None:
+            # Made once and kept, so animate=True can remember the last value
+            bar_options.setdefault("border_width", 1)
+            bar = Progressbar(0, 0, length=width, thickness=height,
+                              maximum=self.maximum, value=self.value, **bar_options)
+            self._floating_bar = bar
+        bar.config(length=width, thickness=height)
+        bar.maximum = self.maximum
+        bar.value = self.value
+        bar.x = rect.centerx - width // 2
+        bar.y = rect.top - gap - height
+        bar.draw(screen)
+
+
+class HeartsBar(Widget):
+    """
+    Shows health as a row of hearts, like Zelda or Minecraft.
+
+    Parameters:
+        x, y        - position of the first heart (top-left)
+        health      - a Health object to show (read every frame, so damage
+                      and healing show up by themselves)
+        hearts      - how many hearts to draw. None = one heart per point
+                      of health. hearts=5 with Health(100) = 20 HP per heart.
+        maximum, value, variable - use these instead of health=
+                      (same names as Progressbar)
+        heart_size  - size of each heart: a number or (width, height)
+        gap         - space between hearts
+        per_row     - start a new row after this many hearts (None = one row)
+        half_hearts - True = show half hearts, False = whole hearts only
+        full_image, half_image, empty_image - pictures of ONE heart.
+                      Leave them out to draw hearts with pygame instead.
+        heart_color, empty_color, border_color, border_width - colours for
+                      the drawn hearts (from the Style if left out)
+        flash_when_hurt - True = the hearts blink while the Health is
+                      invincible after a hit (needs update(tick))
+
+    A heart that is only partly full is rounded UP, so you always see at
+    least half a heart until the health reaches 0.
+
+    Example:
+        player_health = Health(6, invincible_ms=800)
+        hearts = HeartsBar(20, 20, health=player_health, hearts=3)  # 2 HP per heart
+        ...
+        hearts.draw(screen)
+    """
+
+    def __init__(self, x, y=0, health=None, hearts=None, maximum=10, value=None,
+                 variable=None, heart_size=32, gap=4, per_row=None, half_hearts=True,
+                 full_image=None, half_image=None, empty_image=None,
+                 heart_color=None, heart_colour=None, empty_color=None,
+                 empty_colour=None, border_color=None, border_colour=None,
+                 border_width=None, flash_when_hurt=False, center=False,
+                 visible=True, style=None, cursor=None):
+        super().__init__(x, y, center=center, visible=visible, style=style)
+        self.cursor = cursor
+        self.health = health
+        self.hearts = hearts
+        self.maximum = maximum
+        if value is None:
+            value = maximum
+        self.variable = variable if variable is not None else DoubleVar(value)
+        self.heart_size = heart_size
+        self.gap = gap
+        self.per_row = per_row
+        self.half_hearts = half_hearts
+        self.full_image = full_image
+        self.half_image = half_image
+        self.empty_image = empty_image
+        self.heart_color = _pick(heart_color, heart_colour)
+        self.empty_color = _pick(empty_color, empty_colour)
+        self.border_color = _pick(border_color, border_colour)
+        self.border_width = border_width
+        self.flash_when_hurt = flash_when_hurt
+        self._flash_time = 0         # counts up while flashing (ms)
+        self._shapes = {}            # drawn hearts, made once and reused
+        self._refresh()
+
+    # value works like Progressbar, so Health(..., bar=hearts) also works
+    @property
+    def value(self):
+        return self.variable.get()
+
+    @value.setter
+    def value(self, new_value):
+        self.variable.set(max(0, min(self.maximum, new_value)))
+
+    # ---- working out the numbers ----
+    def _numbers(self):
+        """Return (maximum, value) from the Health object, or our own."""
+        if self.health is not None:
+            return self.health.maximum, self.health.value
+        return self.maximum, self.value
+
+    def heart_count(self):
+        """How many hearts are drawn (full and empty)."""
+        import math
+        if self.hearts is not None:
+            return max(1, int(self.hearts))
+        maximum = self._numbers()[0]
+        return max(1, int(math.ceil(maximum)))
+
+    def hearts_filled(self):
+        """How many hearts are full, e.g. 2.5 = two and a half hearts."""
+        import math
+        maximum, value = self._numbers()
+        if maximum <= 0 or value <= 0:
+            return 0
+        filled = value / maximum * self.heart_count()
+        # round(..., 6) stops tiny maths errors (2.0000001) rounding up
+        if self.half_hearts:
+            return math.ceil(round(filled * 2, 6)) / 2
+        return math.ceil(round(filled, 6))
+
+    def _size(self):
+        """Size of one heart as (width, height)."""
+        if isinstance(self.heart_size, (tuple, list)):
+            return int(self.heart_size[0]), int(self.heart_size[1])
+        return int(self.heart_size), int(self.heart_size)
+
+    def _refresh(self):
+        """Work out the widget's size from the number of hearts."""
+        import math
+        count = self.heart_count()
+        if count > 30:
+            message = (f"HeartsBar has {count} hearts - did you forget hearts=? "
+                       f"e.g. HeartsBar(x, y, health=..., hearts=5)")
+            if message not in Layout._printed:
+                Layout._printed.add(message)
+                print("Warning:", message)
+        per_row = self.per_row or count
+        columns = min(count, per_row)
+        rows = math.ceil(count / per_row)
+        w, h = self._size()
+        self.width = columns * w + (columns - 1) * self.gap
+        self.height = rows * h + (rows - 1) * self.gap
+
+    # ---- drawing ----
+    def _drawn_heart(self, color):
+        """A heart shape drawn with pygame (made once, then reused)."""
+        w, h = self._size()
+        border = self.cget("border_width") or 0
+        border_color = self.cget("border_color")
+        key = (color, w, h, border, border_color)
+        if key not in self._shapes:
+            surface = pg.Surface((w, h), pg.SRCALPHA)
+            if border and border_color is not None:
+                _draw_heart_shape(surface, border_color, pg.Rect(0, 0, w, h))
+                inner = pg.Rect(0, 0, w, h).inflate(-2 * border, -2 * border)
+                _draw_heart_shape(surface, color, inner)
+            else:
+                _draw_heart_shape(surface, color, pg.Rect(0, 0, w, h))
+            self._shapes[key] = surface
+        return self._shapes[key]
+
+    def _pictures(self):
+        """Return the (full, empty) heart pictures to use."""
+        size = self._size()
+        if self.full_image is not None:
+            full = load_image(self.full_image, size)
+        else:
+            full = self._drawn_heart(self.cget("heart_color"))
+        if self.empty_image is not None:
+            empty = load_image(self.empty_image, size)
+        else:
+            empty = self._drawn_heart(self.cget("empty_color"))
+        return full, empty
+
+    def update(self, tick):
+        """Only needed for flash_when_hurt."""
+        if self.flash_when_hurt and self.health is not None and self.health.invincible:
+            self._flash_time += tick
+        else:
+            self._flash_time = 0
+
+    def draw(self, screen, offset=(0, 0)):
+        if not self.visible:
+            return
+        self._drawn(screen, offset)
+        self._refresh()
+        # Blink: hidden for 100 ms, shown for 100 ms, while flashing
+        if self._flash_time and (self._flash_time // 100) % 2 == 1:
+            return
+        r = self.get_rect(offset)
+        w, h = self._size()
+        full, empty = self._pictures()
+        filled = self.hearts_filled()
+        per_row = self.per_row or self.heart_count()
+        for i in range(self.heart_count()):
+            x = r.x + (i % per_row) * (w + self.gap)
+            y = r.y + (i // per_row) * (h + self.gap)
+            if i + 1 <= filled:                       # a full heart
+                screen.blit(full, (x, y))
+            elif i + 0.5 <= filled:                   # a half heart
+                if self.half_image is not None:
+                    screen.blit(load_image(self.half_image, (w, h)), (x, y))
+                else:
+                    screen.blit(empty, (x, y))
+                    screen.blit(full, (x, y), area=pg.Rect(0, 0, w // 2, h))
+            else:                                     # an empty heart
+                screen.blit(empty, (x, y))
+
+
+def _draw_heart_shape(surface, color, rect):
+    """Draw a simple heart (two circles and a triangle) filling rect."""
+    radius = rect.width / 4
+    top = rect.y + radius
+    pg.draw.circle(surface, color, (rect.x + radius, top), radius)
+    pg.draw.circle(surface, color, (rect.right - radius, top), radius)
+    pg.draw.polygon(surface, color, [(rect.x, top + 1), (rect.right, top + 1),
+                                     (rect.centerx, rect.bottom)])
+
+
+# ================================
+# Projectile classes (bullets, arrows, fireballs...)
+# ================================
+
+class Projectile(SpriteObject):
+    """
+    Something that flies in a straight line (a bullet, arrow, fireball).
+    Usually made for you by a Shooter.
+
+    Parameters:
+        x, y      - where it starts (its centre)
+        velocity  - (vx, vy) in pixels per second
+        damage    - how much it hurts
+        lifetime  - milliseconds before it disappears
+        width, height, image, bg - how it looks
+        owner     - who fired it (so it doesn't hit them)
+        pierce    - True: keeps going after hitting something
+        gravity   - pulls it down (pixels per second²), e.g. for arrows / grenades
+        solids    - walls it stops at
+    """
+
+    def __init__(self, x, y, velocity, damage=1, lifetime=2000, width=10, height=4,
+                 image=None, bg=(255, 230, 80), owner=None, pierce=False, gravity=0,
+                 solids=None, rotate=True):
+        super().__init__(0, 0, width, height, image=image, bg=bg)
+        self.velocity = pg.Vector2(velocity)
+        self.damage = damage
+        self.lifetime = lifetime
+        self.owner = owner
+        self.pierce = pierce
+        self.gravity = gravity
+        self.solids = solids or []
+        self.alive = True
+        self.already_hit = set()
+        self._pos = pg.Vector2(x, y)
+        self._base_image = self.image
+        self.rotate = rotate
+        self._turn()
+
+    def _turn(self):
+        """Point the picture the way it is flying."""
+        if self.rotate and self.velocity.length():
+            angle = -self.velocity.as_polar()[1]
+            self.image = pg.transform.rotate(self._base_image, angle)
+        self.rect = self.image.get_rect(center=(round(self._pos.x), round(self._pos.y)))
+
+    def update(self, tick):
+        if not self.alive:
+            return
+        dt = tick / 1000
+        self.velocity.y += self.gravity * dt
+        self._pos += self.velocity * dt
+        self.lifetime -= tick
+        if self.gravity:
+            self._turn()
+        else:
+            self.rect.center = (round(self._pos.x), round(self._pos.y))
+        if self.lifetime <= 0 or any(self.rect.colliderect(_rect_of(s)) for s in self.solids):
+            self.alive = False
+
+
+class Hit:
+    """One projectile hitting one target (from ProjectileGroup.hits)."""
+
+    def __init__(self, projectile, target):
+        self.projectile = projectile
+        self.target = target
+        self.damage = projectile.damage
+
+
+class ProjectileGroup:
+    """
+    Keeps track of projectiles: moves them, removes old ones, finds hits.
+
+        bullets = ProjectileGroup()
+        bullets.update(tick)
+        for hit in bullets.hits(enemies):
+            hit.target.health.damage(hit.damage)
+        bullets.draw(screen, camera)
+    """
+
+    def __init__(self):
+        self.projectiles = []
+
+    def add(self, *projectiles):
+        self.projectiles.extend(projectiles)
+
+    def __iter__(self):
+        return iter(list(self.projectiles))
+
+    def __len__(self):
+        return len(self.projectiles)
+
+    def clear(self):
+        self.projectiles = []
+
+    def update(self, tick):
+        for p in self.projectiles:
+            p.update(tick)
+        self.projectiles = [p for p in self.projectiles if p.alive]
+
+    def hits(self, targets):
+        """
+        Every projectile touching a target (anything with a .rect).
+        Non-piercing projectiles are removed when they hit.
+        Each projectile hits each target only once.
+        """
+        found = []
+        for p in self.projectiles:
+            if not p.alive:
+                continue
+            for target in targets:
+                if target is p.owner or id(target) in p.already_hit:
+                    continue
+                if getattr(target, "visible", True) and p.rect.colliderect(target.rect):
+                    p.already_hit.add(id(target))
+                    found.append(Hit(p, target))
+                    if not p.pierce:
+                        p.alive = False
+                        break
+        self.projectiles = [p for p in self.projectiles if p.alive]
+        return found
+
+    def draw(self, screen, camera=None):
+        for p in self.projectiles:
+            p.draw(screen, camera)
+
+
+class Shooter:
+    """
+    Fires projectiles with a cooldown (a gun, a bow, a wand...).
+
+    Parameters:
+        group     - the ProjectileGroup to add projectiles to
+        cooldown  - smallest time between shots (ms)
+        speed     - projectile speed (pixels per second)
+        damage, lifetime, width, height, image, bg, pierce, gravity, solids
+        spread    - degrees of random wobble
+        count     - projectiles per shot (e.g. 5 for a shotgun)
+        fan       - degrees between projectiles when count > 1
+        owner     - who is shooting (they won't be hit)
+
+    Example:
+        gun = Shooter(bullets, cooldown=200, speed=600, damage=5, owner=player)
+        if mouse.is_pressed("left"):
+            gun.fire(player.rect.center, target=mouse.pos)
+    """
+
+    def __init__(self, group, cooldown=250, speed=500, damage=1, lifetime=2000,
+                 width=10, height=4, image=None, bg=(255, 230, 80), pierce=False,
+                 gravity=0, solids=None, spread=0, count=1, fan=10, owner=None,
+                 sound=None):
+        self.group = group
+        self.cooldown = cooldown
+        self.speed = speed
+        self.damage = damage
+        self.lifetime = lifetime
+        self.size = (width, height)
+        self.image = image
+        self.bg = bg
+        self.pierce = pierce
+        self.gravity = gravity
+        self.solids = solids
+        self.spread = spread
+        self.count = count
+        self.fan = fan
+        self.owner = owner
+        self.sound = sound
+        self._last_shot = -10 ** 9
+
+    def can_fire(self):
+        return pg.time.get_ticks() - self._last_shot >= self.cooldown
+
+    def fire(self, position, direction=None, target=None):
+        """
+        Fire from position, either in a direction like (1, 0) (right) or
+        towards a target point like the mouse. Returns the new projectiles
+        (an empty list if still cooling down).
+        """
+        import random
+        if not self.can_fire():
+            return []
+        if target is not None:
+            direction = pg.Vector2(target) - pg.Vector2(position)
+        direction = pg.Vector2(direction if direction is not None else (1, 0))
+        if direction.length() == 0:
+            direction = pg.Vector2(1, 0)
+        direction = direction.normalize()
+        made = []
+        first = -self.fan * (self.count - 1) / 2
+        for i in range(self.count):
+            angle = first + i * self.fan + random.uniform(-self.spread, self.spread)
+            velocity = direction.rotate(angle) * self.speed
+            made.append(Projectile(position[0], position[1], velocity, self.damage,
+                                   self.lifetime, *self.size, image=self.image, bg=self.bg,
+                                   owner=self.owner, pierce=self.pierce,
+                                   gravity=self.gravity, solids=self.solids))
+        self.group.add(*made)
+        self._last_shot = pg.time.get_ticks()
+        if self.sound is not None:
+            self.sound.play()
+        return made
+
+
+# ================================
+# Effects: flash, blink, knockback (camera.shake is on Camera)
+# ================================
+
+def flash(sprite, ms=120, color=WHITE):
+    """Make a sprite flash a colour for a moment (e.g. when it is hit)."""
+    sprite._flash_until = pg.time.get_ticks() + ms
+    sprite._flash_color = color
+
+
+def blink(sprite, ms=800, rate=80):
+    """Make a sprite flicker on and off (e.g. while invincible)."""
+    sprite._blink_until = pg.time.get_ticks() + ms
+    sprite._blink_rate = rate
+
+
+def knockback(thing, from_pos, strength=300, lift=0):
+    """
+    Push something away from a point (e.g. away from the attacker).
+    thing: a TopDownBody / PlatformerBody (smooth push), or a sprite (instant jump).
+    lift: also bounce it upwards (platformers).
+    """
+    sprite = thing.sprite if isinstance(thing, Body) else thing
+    direction = pg.Vector2(sprite.rect.center) - pg.Vector2(from_pos)
+    if direction.length() == 0:
+        direction = pg.Vector2(1, 0)
+    direction = direction.normalize() * strength
+    if isinstance(thing, Body):
+        thing.push(direction.x, direction.y - lift)
+    else:
+        sprite.rect.move_ip(round(direction.x * 0.05), round(direction.y * 0.05))
+
+
+# ================================
+# Particles
+# ================================
+
+def _value(setting):
+    """A number, or a random number from a (low, high) range."""
+    import random
+    if isinstance(setting, (tuple, list)):
+        return random.uniform(setting[0], setting[1])
+    return setting
+
+
+def _mix(colours, t):
+    """Colour part-way (t = 0.0 to 1.0) through a list of colours."""
+    if not isinstance(colours[0], (tuple, list)):
+        return colours
+    if len(colours) == 1:
+        return colours[0]
+    position = t * (len(colours) - 1)
+    i = min(int(position), len(colours) - 2)
+    f = position - i
+    a, b = colours[i], colours[i + 1]
+    return tuple(int(a[k] + (b[k] - a[k]) * f) for k in range(3))
+
+
+class ParticleEmitter:
+    """
+    Makes particles: sparks, smoke, fire, rain, dust, magic... Every setting
+    can be one number or a (low, high) range for some randomness.
+
+    Parameters:
+        pos       - where particles start (x, y)
+        follow    - a sprite to follow (particles start from its centre)
+        rate      - particles per second (0 = only when you call burst())
+        lifetime  - how long each particle lives (ms)
+        speed     - pixels per second
+        angle     - direction in degrees (0 = right, -90 = up, 90 = down)
+        spread    - degrees either side of angle (180 = every direction)
+        gravity   - pulls particles down (negative = up, e.g. smoke)
+        wind      - pushes particles sideways
+        drag      - slows particles down (0 = none, 3 = a lot)
+        size      - (start size, end size), e.g. (8, 0) shrinks to nothing
+        color     - one colour, or a list they change through, e.g.
+                    [(255, 255, 200), (255, 120, 0), (60, 60, 60)]
+        alpha     - (start, end) see-through-ness, 255 = solid, 0 = invisible
+        shape     - "circle", "square", "line" (stretches as it moves), or an
+                    image (filename or Surface)
+        spin      - degrees per second (for squares and images)
+        area      - start from a random spot: ("rect", width, height) or ("circle", radius)
+        glow      - True: colours add up and glow (fire, magic, lasers)
+        floor     - y position particles bounce on (None = no floor)
+        bounce    - how bouncy the floor is (0 - 1)
+        duration  - stop making particles after this many ms (None = keep going)
+        max_particles - limit (keeps the game fast)
+
+    Methods: burst(count, pos=None), start(), stop(), move_to(pos), remove()
+
+    Every emitter is looked after by Particles, so you only need
+        Particles.update(tick)            # in update(tick)
+        Particles.draw(screen, camera)    # in draw_game()
+    """
+
+    def __init__(self, pos=(0, 0), follow=None, rate=20, lifetime=(500, 1000),
+                 speed=(40, 120), angle=-90, spread=180, gravity=0, wind=0, drag=0,
+                 size=(6, 0), color=(255, 255, 255), colour=None, alpha=(255, 0),
+                 shape="circle", spin=0, area=None, glow=False, floor=None, bounce=0.4,
+                 duration=None, max_particles=400, once=False, offset=(0, 0)):
+        self.pos = pg.Vector2(pos)
+        self.follow = follow
+        self.offset = pg.Vector2(offset)
+        self.rate = rate
+        self.lifetime = lifetime
+        self.speed = speed
+        self.angle = angle
+        self.spread = spread
+        self.gravity = gravity
+        self.wind = wind
+        self.drag = drag
+        self.size = size if isinstance(size, (tuple, list)) else (size, size)
+        self.color = _pick(colour, color)
+        self.alpha = alpha if isinstance(alpha, (tuple, list)) else (alpha, alpha)
+        self.shape = shape
+        self.spin = spin
+        self.area = area
+        self.glow = glow
+        self.floor = floor
+        self.bounce = bounce
+        self.duration = duration
+        self.max_particles = max_particles
+        self.once = once                 # remove itself when its particles are gone
+        self.emitting = rate > 0
+        self.particles = []              # [x, y, vx, vy, age, life, angle, spin]
+        self._carry = 0.0
+        self._age = 0
+        Particles.add(self)
+
+    # ---- control ----
+    def start(self):
+        self.emitting = True
+        self._age = 0
+
+    def stop(self):
+        self.emitting = False
+
+    def move_to(self, pos):
+        self.pos = pg.Vector2(pos)
+
+    def remove(self):
+        Particles.remove(self)
+
+    @property
+    def count(self):
+        return len(self.particles)
+
+    @property
+    def finished(self):
+        return not self.emitting and not self.particles
+
+    def _origin(self):
+        if self.follow is not None:
+            return pg.Vector2(self.follow.rect.center) + self.offset
+        return self.pos + self.offset
+
+    def burst(self, count=20, pos=None):
+        """Make lots of particles at once (an explosion, a puff of dust)."""
+        if pos is not None:
+            self.pos = pg.Vector2(pos)
+        for _ in range(int(count)):
+            self._spawn()
+
+    def _spawn(self):
+        import math
+        import random
+        if len(self.particles) >= self.max_particles:
+            return
+        origin = self._origin()
+        if self.area:
+            if self.area[0] == "rect":
+                origin += (random.uniform(-self.area[1] / 2, self.area[1] / 2),
+                           random.uniform(-self.area[2] / 2, self.area[2] / 2))
+            else:
+                a, d = random.uniform(0, 2 * math.pi), random.uniform(0, self.area[1])
+                origin += (math.cos(a) * d, math.sin(a) * d)
+        direction = math.radians(self.angle + random.uniform(-self.spread, self.spread))
+        speed = _value(self.speed)
+        self.particles.append([origin.x, origin.y, math.cos(direction) * speed,
+                               math.sin(direction) * speed, 0, _value(self.lifetime),
+                               random.uniform(0, 360), _value(self.spin),
+                               random.random()])
+
+    # ---- update and draw ----
+    def update(self, tick):
+        dt = tick / 1000
+        if self.emitting:
+            self._age += tick
+            if self.duration is not None and self._age >= self.duration:
+                self.emitting = False
+            self._carry += self.rate * dt
+            while self._carry >= 1:
+                self._carry -= 1
+                self._spawn()
+        slow = max(0, 1 - self.drag * dt)
+        alive = []
+        for p in self.particles:
+            p[4] += tick
+            if p[4] >= p[5]:
+                continue
+            p[2] = (p[2] + self.wind * dt) * slow
+            p[3] = (p[3] + self.gravity * dt) * slow
+            p[0] += p[2] * dt
+            p[1] += p[3] * dt
+            p[6] += p[7] * dt
+            if self.floor is not None and p[1] > self.floor and p[3] > 0:
+                p[1] = self.floor
+                p[3] = -p[3] * self.bounce
+                p[2] *= 0.8
+            alive.append(p)
+        self.particles = alive
+
+    def draw(self, screen, camera=None):
+        import math
+        for p in self.particles:
+            t = p[4] / p[5]
+            size = self.size[0] + (self.size[1] - self.size[0]) * t
+            if size < 0.5:
+                continue
+            colour = _mix(self.color, t) if isinstance(self.color[0], (tuple, list)) \
+                else tuple(self.color[:3])
+            alpha = int(self.alpha[0] + (self.alpha[1] - self.alpha[0]) * t)
+            x, y = p[0], p[1]
+            if camera is not None:
+                x, y = camera.apply_pos((x, y))
+            if self.shape == "line":
+                speed = math.hypot(p[2], p[3]) or 1
+                length = max(size * 2, speed * 0.04)
+                end = (x - p[2] / speed * length, y - p[3] / speed * length)
+                if self.glow:
+                    colour = tuple(int(c * alpha / 255) for c in colour)
+                elif alpha < 255:
+                    colour = tuple(int(c * alpha / 255) for c in colour)
+                pg.draw.line(screen, colour, (x, y), end, max(1, int(size / 2)))
+                continue
+            picture = Particles._picture(self.shape, int(size), colour, alpha, self.glow,
+                                         int(p[6] // 15 * 15) if (self.spin or not
+                                                                 isinstance(self.shape, str)) else 0)
+            rect = picture.get_rect(center=(int(x), int(y)))
+            if self.glow:
+                screen.blit(picture, rect, special_flags=pg.BLEND_ADD)
+            else:
+                screen.blit(picture, rect)
+        if Debug.on:
+            o = self._origin()
+            if camera is not None:
+                o = pg.Vector2(camera.apply_pos(o))
+            pg.draw.line(screen, (0, 255, 255), (o.x - 6, o.y), (o.x + 6, o.y))
+            pg.draw.line(screen, (0, 255, 255), (o.x, o.y - 6), (o.x, o.y + 6))
+            screen.blit(get_font(None, 16).render(str(len(self.particles)), True, (0, 255, 255)),
+                        (o.x + 6, o.y + 4))
+
+
+class Particles:
+    """
+    Looks after every ParticleEmitter, and has ready-made effects.
+
+        Particles.update(tick)              # in update(tick)
+        Particles.draw(screen, camera)      # in draw_game()
+
+        Particles.explosion((x, y))         # one-off effects
+        Particles.sparks((x, y))
+        Particles.dust((x, y))
+        Particles.confetti((x, y))
+        smoke = Particles.smoke(follow=chimney)     # keeps going until smoke.stop()
+        fire = Particles.fire(pos=(x, y))
+        Particles.rain(screen.get_rect())   Particles.snow(screen.get_rect())
+        Particles.magic(follow=wizard)      Particles.trail(follow=rocket)
+        FloatingText(x, y, "+10")           # a text particle (see FloatingText)
+
+    Each preset is just a ParticleEmitter with settings - copy one from the
+    library and change the numbers to make your own effect.
+    """
+
+    emitters = []
+    _cache = {}
+
+    @classmethod
+    def add(cls, emitter):
+        if emitter not in cls.emitters:
+            cls.emitters.append(emitter)
+
+    @classmethod
+    def remove(cls, emitter):
+        if emitter in cls.emitters:
+            cls.emitters.remove(emitter)
+
+    @classmethod
+    def clear(cls):
+        cls.emitters = []
+
+    @classmethod
+    def count(cls):
+        return sum(e.count for e in cls.emitters)
+
+    @classmethod
+    def update(cls, tick):
+        for emitter in list(cls.emitters):
+            emitter.update(tick)
+            if emitter.once and emitter.finished:
+                cls.emitters.remove(emitter)
+
+    @classmethod
+    def draw(cls, screen, camera=None):
+        for emitter in cls.emitters:
+            emitter.draw(screen, camera)
+
+    @classmethod
+    def _picture(cls, shape, size, colour, alpha, glow, angle):
+        """Particle pictures are made once and reused (much faster)."""
+        alpha = alpha // 16 * 16
+        colour = tuple(c // 8 * 8 for c in colour)
+        key = (shape if isinstance(shape, str) else id(shape), size, colour, alpha, glow, angle)
+        picture = cls._cache.get(key)
+        if picture is not None:
+            return picture
+        if len(cls._cache) > 3000:
+            cls._cache.clear()
+        size = max(1, size)
+        if isinstance(shape, str) and shape in ("circle", "square"):
+            picture = pg.Surface((size, size), pg.SRCALPHA)
+            fill = tuple(int(c * alpha / 255) for c in colour) + (255,) if glow \
+                else tuple(colour) + (alpha,)
+            if shape == "circle":
+                pg.draw.circle(picture, fill, (size / 2, size / 2), size / 2)
+            else:
+                picture.fill(fill)
+                if angle:
+                    picture = pg.transform.rotate(picture, angle)
+        else:
+            picture = load_image(shape, (size, size)).copy()
+            if angle:
+                picture = pg.transform.rotate(picture, angle)
+            picture.set_alpha(alpha)
+        cls._cache[key] = picture
+        return picture
+
+    # ---- ready-made effects ----
+    @classmethod
+    def explosion(cls, pos, scale=1.0):
+        fire = ParticleEmitter(pos, rate=0, lifetime=(300, 700), speed=(80 * scale, 320 * scale),
+                               spread=180, drag=3, size=(14 * scale, 2), glow=True,
+                               color=[(255, 255, 220), (255, 170, 40), (200, 40, 0), (40, 20, 20)],
+                               once=True)
+        fire.burst(int(40 * scale))
+        smoke = ParticleEmitter(pos, rate=0, lifetime=(600, 1300), speed=(20, 90 * scale),
+                                spread=180, drag=2, gravity=-60, size=(10 * scale, 26 * scale),
+                                alpha=(160, 0), color=[(90, 90, 90), (40, 40, 40)], once=True)
+        smoke.burst(int(15 * scale))
+        return fire
+
+    @classmethod
+    def sparks(cls, pos, count=25, color=(255, 220, 120)):
+        e = ParticleEmitter(pos, rate=0, lifetime=(200, 500), speed=(150, 400), spread=180,
+                            gravity=600, size=(4, 1), shape="line", glow=True,
+                            color=[color, (255, 100, 0)], alpha=(255, 60), once=True)
+        e.burst(count)
+        return e
+
+    @classmethod
+    def dust(cls, pos, count=12, color=(170, 150, 120)):
+        e = ParticleEmitter(pos, rate=0, lifetime=(300, 600), speed=(30, 90), angle=-90,
+                            spread=80, gravity=150, drag=2, size=(6, 2), color=color,
+                            alpha=(200, 0), once=True)
+        e.burst(count)
+        return e
+
+    @classmethod
+    def confetti(cls, pos, count=60):
+        colours = [(255, 80, 80), (80, 200, 255), (255, 220, 60), (120, 230, 120), (220, 120, 255)]
+        import random
+        last = None
+        for colour in colours:
+            last = ParticleEmitter(pos, rate=0, lifetime=(1200, 2200), speed=(150, 380),
+                                   angle=-90, spread=50, gravity=350, drag=1.2, size=(7, 7),
+                                   shape="square", spin=(-400, 400), color=colour,
+                                   alpha=(255, 200), once=True)
+            last.burst(count // len(colours) + random.randint(0, 2))
+        return last
+
+    @classmethod
+    def smoke(cls, pos=(0, 0), follow=None, rate=12):
+        return ParticleEmitter(pos, follow=follow, rate=rate, lifetime=(1200, 2200),
+                               speed=(15, 40), angle=-90, spread=20, gravity=-20, wind=15,
+                               size=(8, 30), alpha=(140, 0),
+                               color=[(150, 150, 150), (80, 80, 80)])
+
+    @classmethod
+    def fire(cls, pos=(0, 0), follow=None, rate=60, size=1.0):
+        return ParticleEmitter(pos, follow=follow, rate=rate, lifetime=(300, 700),
+                               speed=(40 * size, 110 * size), angle=-90, spread=15,
+                               gravity=-80, size=(16 * size, 2), area=("rect", 18 * size, 4),
+                               glow=True, alpha=(255, 0),
+                               color=[(255, 240, 160), (255, 150, 30), (180, 30, 0)])
+
+    @classmethod
+    def rain(cls, area, rate=300):
+        r = pg.Rect(area)
+        return ParticleEmitter((r.centerx, r.top), rate=rate, lifetime=(600, 900),
+                               speed=(500, 650), angle=100, spread=2, size=(3, 3),
+                               shape="line", area=("rect", r.width, 4), alpha=(170, 170),
+                               color=(150, 180, 255), floor=r.bottom, bounce=0.1,
+                               max_particles=1000)
+
+    @classmethod
+    def snow(cls, area, rate=40):
+        r = pg.Rect(area)
+        return ParticleEmitter((r.centerx, r.top), rate=rate, lifetime=(4000, 7000),
+                               speed=(20, 50), angle=90, spread=20, wind=8, size=(5, 3),
+                               area=("rect", r.width, 4), alpha=(230, 120),
+                               color=(255, 255, 255), max_particles=600)
+
+    @classmethod
+    def magic(cls, pos=(0, 0), follow=None, rate=40, color=(160, 120, 255)):
+        return ParticleEmitter(pos, follow=follow, rate=rate, lifetime=(400, 900),
+                               speed=(10, 50), spread=180, gravity=-40, size=(7, 0),
+                               area=("circle", 14), glow=True,
+                               color=[(255, 255, 255), color, (40, 0, 80)])
+
+    @classmethod
+    def trail(cls, follow, rate=60, color=(255, 200, 80), size=8):
+        return ParticleEmitter(follow=follow, rate=rate, lifetime=(250, 450), speed=(0, 15),
+                               spread=180, size=(size, 0), glow=True,
+                               color=[color, (120, 30, 0)])
+
+
+# ================================
+# FloatingText Class (damage numbers, "+10" pop-ups)
+# ================================
+
+class FloatingText:
+    """
+    Text that pops up, floats upwards and fades away: damage numbers,
+    "+10" for a coin, "Level up!"...
+
+    FloatingText is a TEXT PARTICLE. Like an explosion, it belongs to
+    Particles, so your game must have the two Particles lines, even if
+    it uses no other particle effects:
+
+        Particles.update(tick)              # in update(tick)
+        Particles.draw(screen, camera)      # in draw_game() (camera is optional)
+
+    Then one line makes a pop-up. You don't need to keep it in a list or
+    delete it: Particles removes it when it has faded out.
+
+        FloatingText(enemy.rect.centerx, enemy.rect.top, "-10", color="red")
+        FloatingText(x, y, 25)              # numbers work too
+
+    Parameters:
+        x, y          - where the middle of the text starts (world position)
+        text          - the words or number to show
+        color         - text colour (default white); colour= also works
+        font_name, font_size - the font (font_name=None is pygame's default;
+                        a file like "assets/my.ttf" works too)
+        font_style    - e.g. "bold" (default: plain)
+        speed         - how fast it floats up, in pixels per second
+        duration      - how long it lasts, in ms (it fades out in the second half)
+        outline_color - a thin outline so it is readable on any background;
+                        None for no outline (outline_colour= also works)
+    """
+
+    def __init__(self, x, y, text, color=None, font_name=None, font_size=24,
+                 speed=60, duration=1000, outline_color=(0, 0, 0), colour=None,
+                 outline_colour=None, font_style=None):
+        self.x = x
+        self.y = float(y)           # float, so slow speeds still move smoothly
+        self.text = str(text)       # numbers become text: 25 -> "25"
+        self.color = _pick(color, colour, (255, 255, 255))
+        self.outline_color = _pick(outline_colour, outline_color)
+        self.font_name = font_name
+        self.font_size = font_size
+        self.font_style = font_style
+        self.speed = speed
+        self.duration = duration
+        self.age = 0                # ms since it appeared
+        self.once = True            # tells Particles to remove it when finished
+        self.image = self._make_image()
+        Particles.add(self)         # Particles updates and draws it from now on
+
+    def _make_image(self):
+        """Draw the text (and its outline) once, so each frame is quick."""
+        font = get_font(self.font_name, self.font_size, self.font_style)
+        words = font.render(self.text, True, pg.Color(self.color))
+        if self.outline_color is None:
+            return words
+        # The outline is the same text in the outline colour, drawn 1 pixel
+        # out in each direction, with the real text on top.
+        edge = font.render(self.text, True, pg.Color(self.outline_color))
+        image = pg.Surface((words.get_width() + 2, words.get_height() + 2), pg.SRCALPHA)
+        for dx, dy in ((0, 1), (2, 1), (1, 0), (1, 2)):
+            image.blit(edge, (dx, dy))
+        image.blit(words, (1, 1))
+        return image
+
+    @property
+    def finished(self):
+        """True once it has completely faded out."""
+        return self.age >= self.duration
+
+    @property
+    def count(self):
+        """Particles.count() counts particles, so a text counts as 0."""
+        return 0
+
+    def remove(self):
+        """Take it off the screen straight away."""
+        Particles.remove(self)
+
+    def update(self, tick):
+        """Float up. Particles.update(tick) calls this for you."""
+        self.age += tick
+        self.y -= self.speed * tick / 1000      # speed is per second, tick is ms
+
+    def draw(self, screen, camera=None):
+        """Draw it, fading in the second half. Particles.draw() calls this for you."""
+        if self.finished:
+            return
+        half = self.duration / 2
+        if self.age <= half:
+            alpha = 255
+        else:
+            alpha = int(255 * (self.duration - self.age) / half)
+        x, y = self.x, self.y
+        if camera is not None:
+            x, y = camera.apply_pos((x, y))
+        self.image.set_alpha(alpha)
+        screen.blit(self.image, self.image.get_rect(center=(int(x), int(y))))
+
+
+# ================================
+# Spawner and Waves (enemies every few seconds, wave 1, wave 2...)
+# ================================
+
+def _warn_once(message):
+    """Print a warning, but only the first time (so it doesn't fill the screen)."""
+    if message not in Layout._printed:
+        Layout._printed.add(message)
+        print("Warning:", message)
+
+
+class Spawner:
+    """
+    Makes new objects (enemies, coins, asteroids...) every few seconds,
+    at the places you choose, with a limit on how many are alive at once.
+
+    YOU write the function that makes ONE object. The Spawner decides
+    when and where to call it:
+
+        def make_slime(x, y):
+            slime = SpriteObject(x, y, 28, 28, image="slime.png")
+            slime.brain = Chaser(slime, player, speed=90)
+            return slime
+
+        spawner = Spawner(make_slime, points=[(40, 40), (760, 40)],
+                          every=1500, max_alive=6)
+
+        spawner.update(tick)              # in update(tick)
+        for slime in spawner:             # every object that is still alive
+            slime.brain.update(tick)
+        spawner.draw(screen, camera)      # in draw_game() (camera is optional)
+
+    An object stops counting as "alive" when you call its kill() (for
+    example Health(20, on_death=slime.kill), or when a coin is picked up).
+    You never have to remove things from a list yourself.
+
+    Parameters:
+        make         - your function make(x, y) that returns ONE new object
+                       (anything with a .rect, usually a SpriteObject).
+                       Return None to skip this spawn.
+        points       - where things appear. Any of:
+                         (x, y)                      one place
+                         [(x, y), (x, y), ...]       several places
+                         pg.Rect(...)                a random spot inside it
+                         level.spawn_points          from a TiledMap
+                         level.objects_of_type("spawner")   Tiled rectangles
+                         a sprite                    its middle (it can move!)
+                       None = the middle of the screen.
+        every        - ms between spawns, or (shortest, longest) for a
+                       random time each go, e.g. every=(800, 2000)
+        max_alive    - never more than this many alive at once (None = no limit)
+        total        - stop after making this many (None = keep going)
+        first_after  - ms before the first one (None = the same as every,
+                       0 = one straight away)
+        pick         - "random" place each time, or "in_turn" (go round them)
+        avoid        - a sprite or rect (usually the player) to keep away from
+        min_distance - places closer than this to avoid are not used, so
+                       nothing pops up right on top of the player
+        world        - a World: new objects are added to it too, so
+                       world.update() / world.draw() look after them
+        start        - False = wait until spawner.start()
+
+    Timing uses update(tick), so when you stop calling update (paused
+    game, another Scene) the Spawner stops too. Nothing to cancel.
+    With Debug on (F1), draw() also shows the spawn places.
+    """
+
+    _options = ("make", "points", "every", "max_alive", "total", "first_after",
+                "pick", "avoid", "min_distance", "world")
+
+    def __init__(self, make, points=None, every=1000, max_alive=None, total=None,
+                 first_after=None, pick="random", avoid=None, min_distance=0,
+                 world=None, start=True):
+        self.make = make
+        self.points = points
+        self.every = every
+        self.max_alive = max_alive
+        self.total = total
+        self.first_after = first_after
+        self.pick = pick
+        self.avoid = avoid
+        self.min_distance = min_distance
+        self.world = world
+        self.sprites = pg.sprite.Group()   # the alive objects that are sprites
+        self._others = []                  # alive objects that are not sprites
+        self.spawned = 0                   # how many it has made so far
+        self.running = start
+        self._turn = 0                     # next place for pick="in_turn"
+        self._wait = self._first_wait()    # ms until the next spawn
+        self._check_every()
+
+    # ---- settings ----
+    def config(self, **options):
+        """Change settings while the game runs, e.g. spawner.config(every=500)."""
+        for name, value in options.items():
+            if name not in self._options:
+                raise ValueError(f"Spawner has no option '{name}'. "
+                                 f"Options: {', '.join(self._options)}")
+            setattr(self, name, value)
+        self._check_every()
+
+    configure = config
+
+    def cget(self, name):
+        """Read a setting, e.g. spawner.cget("every")."""
+        if name not in self._options:
+            raise ValueError(f"Spawner has no option '{name}'")
+        return getattr(self, name)
+
+    def _check_every(self):
+        times = self.every if isinstance(self.every, (tuple, list)) else [self.every]
+        if min(times) <= 0:
+            _warn_once(f"Spawner every={self.every} - it needs a time in ms "
+                       f"above 0, e.g. every=1000. Using 1000.")
+
+    def _next_wait(self):
+        """How long until the next spawn (picks a random time for every=(a, b))."""
+        import random
+        every = self.every
+        if isinstance(every, (tuple, list)):
+            every = random.randint(int(every[0]), int(every[1]))
+        return every if every > 0 else 1000
+
+    def _first_wait(self):
+        return self._next_wait() if self.first_after is None else self.first_after
+
+    # ---- what is alive ----
+    def alive(self):
+        """A list of every object it made that is still alive."""
+        return list(self.sprites) + list(self._others)
+
+    def __iter__(self):
+        # A copy, so you can kill() things while looping over the spawner
+        return iter(self.alive())
+
+    def __len__(self):
+        return len(self.sprites) + len(self._others)
+
+    def remove(self, thing):
+        """Stop counting something as alive (for objects that aren't sprites)."""
+        if isinstance(thing, pg.sprite.Sprite):
+            thing.kill()
+        elif thing in self._others:
+            self._others.remove(thing)
+
+    def clear(self):
+        """Remove everything it made (kill() every sprite)."""
+        for thing in self.alive():
+            self.remove(thing)
+
+    @property
+    def done_spawning(self):
+        """True when it has made `total` objects."""
+        return self.total is not None and self.spawned >= self.total
+
+    @property
+    def cleared(self):
+        """True when it has made `total` objects AND none are left alive."""
+        return self.done_spawning and len(self) == 0
+
+    def time_left(self):
+        """ms until the next spawn."""
+        return max(0, self._wait)
+
+    # ---- start / stop ----
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        """Stop spawning (the objects already made stay)."""
+        self.running = False
+
+    def reset(self):
+        """Start counting again from 0 spawned (alive objects stay)."""
+        self.spawned = 0
+        self._turn = 0
+        self._wait = self._first_wait()
+
+    # ---- places ----
+    def _places(self):
+        """
+        Turn `points` into a list of places. Each place is an (x, y)
+        point or a pg.Rect area. Worked out every time, so a sprite used
+        as a spawn point can move.
+        """
+        points = self.points
+        if points is None:
+            screen = pg.display.get_surface()
+            w, h = screen.get_size() if screen else (0, 0)
+            return [(w // 2, h // 2)]
+        if isinstance(points, dict):                  # map.spawn_points
+            points = list(points.values())
+        elif self._is_point(points) or isinstance(points, pg.Rect) or hasattr(points, "rect"):
+            points = [points]                         # just one place
+        places = []
+        for item in points:
+            if self._is_point(item):
+                places.append((item[0], item[1]))
+            elif isinstance(item, pg.Rect):
+                places.append(item)
+            elif isinstance(item, dict) and "rect" in item:   # a Tiled object
+                rect = pg.Rect(item["rect"])
+                places.append(rect if rect.width and rect.height else rect.topleft)
+            elif hasattr(item, "rect"):                # a sprite: its middle
+                places.append(item.rect.center)
+        if not places:
+            _warn_once("Spawner has no spawn places - check points=")
+        return places
+
+    @staticmethod
+    def _is_point(item):
+        return (isinstance(item, (tuple, list)) and len(item) == 2
+                and all(isinstance(n, (int, float)) for n in item))
+
+    def _too_close(self, x, y):
+        """True if (x, y) is closer to `avoid` than min_distance."""
+        if self.avoid is None or not self.min_distance:
+            return False
+        rect = getattr(self.avoid, "rect", self.avoid)
+        cx, cy = pg.Rect(rect).center
+        return (x - cx) ** 2 + (y - cy) ** 2 < self.min_distance ** 2
+
+    def _spot_in(self, place):
+        """
+        An (x, y) to spawn at for one place, or None if it is too close
+        to `avoid`. Areas try a few random spots.
+        """
+        import random
+        if not isinstance(place, pg.Rect):
+            return None if self._too_close(*place) else place
+        for _ in range(10):
+            x = random.randint(place.left, max(place.left, place.right - 1))
+            y = random.randint(place.top, max(place.top, place.bottom - 1))
+            if not self._too_close(x, y):
+                return (x, y)
+        return None
+
+    def _choose(self):
+        """Pick a place and a spot in it: returns (place, (x, y)) or None."""
+        import random
+        places = self._places()
+        if not places:
+            return None
+        if self.pick == "in_turn":
+            order = [(self._turn + i) % len(places) for i in range(len(places))]
+        else:
+            order = list(range(len(places)))
+            random.shuffle(order)
+        for index in order:
+            spot = self._spot_in(places[index])
+            if spot is not None:
+                self._turn = index + 1
+                return places[index], spot
+        return None              # every place is too close to `avoid`
+
+    # ---- spawning ----
+    def _room(self):
+        """True if another one is allowed right now."""
+        if self.done_spawning:
+            return False
+        return self.max_alive is None or len(self) < self.max_alive
+
+    def spawn_now(self):
+        """
+        Make one straight away (still keeps to max_alive, total and avoid).
+        Returns the new object, or None if it couldn't.
+        """
+        result, thing = self._spawn()
+        return thing
+
+    def _spawn(self):
+        """
+        Try to make one. Returns (result, thing) where result is
+        "made", "full" (max_alive / total reached), "blocked" (every place
+        is too close to `avoid`) or "skipped" (your make() returned None).
+        """
+        if not self._room():
+            return "full", None
+        choice = self._choose()
+        if choice is None:
+            return "blocked", None
+        place, (x, y) = choice
+        thing = self.make(x, y)
+        if thing is None:
+            return "skipped", None
+        rect = getattr(thing, "rect", None)
+        if rect is None:
+            _warn_once("Spawner: make() must return something with a .rect "
+                       "(e.g. a SpriteObject)")
+        elif isinstance(place, pg.Rect):
+            rect.clamp_ip(place)           # keep it inside the area
+        if isinstance(thing, pg.sprite.Sprite):
+            self.sprites.add(thing)
+            if self.world is not None:
+                self.world.add_sprite(thing)
+        else:
+            self._others.append(thing)
+        self.spawned += 1
+        return "made", thing
+
+    def update(self, tick):
+        """Count down and spawn when it is time. Call once per frame."""
+        if not self.running or self.done_spawning:
+            return
+        self._wait -= tick
+        if self._wait > 0:
+            return
+        result, thing = self._spawn()
+        if result in ("full", "blocked"):
+            # Full: spawn as soon as one dies.
+            # Blocked (too close to the player): try again next frame.
+            self._wait = 0
+        else:
+            self._wait = max(0, self._wait + self._next_wait())
+
+    # ---- drawing ----
+    def draw(self, screen, camera=None):
+        """
+        Draw everything it made (not needed if you gave it world=, because
+        the World draws them). With Debug on (F1) also show the spawn places.
+        """
+        if self.world is None:
+            for thing in self.alive():
+                if not getattr(thing, "visible", True):
+                    continue
+                if camera is not None:
+                    thing.draw(screen, camera)
+                else:
+                    thing.draw(screen)
+        if Debug.on:
+            self.draw_debug(screen, camera)
+
+    def draw_debug(self, screen, camera=None):
+        """Yellow = a spawn place, grey = too close to `avoid` right now."""
+        to_screen = (lambda p: camera.apply_pos(p)) if camera else (lambda p: p)
+        places = self._places()
+        for place in places:
+            if isinstance(place, pg.Rect):
+                blocked = self._too_close(*place.center)
+                colour = (120, 120, 120) if blocked else (255, 220, 0)
+                x, y = to_screen(place.topleft)
+                pg.draw.rect(screen, colour, (x, y, place.width, place.height), 1)
+            else:
+                colour = (120, 120, 120) if self._too_close(*place) else (255, 220, 0)
+                x, y = to_screen(place)
+                pg.draw.circle(screen, colour, (int(x), int(y)), 8, 2)
+                pg.draw.line(screen, colour, (x - 12, y), (x + 12, y))
+                pg.draw.line(screen, colour, (x, y - 12), (x, y + 12))
+        if self.avoid is not None and self.min_distance:
+            rect = pg.Rect(getattr(self.avoid, "rect", self.avoid))
+            pg.draw.circle(screen, (255, 80, 80), to_screen(rect.center),
+                           int(self.min_distance), 1)
+        if places:
+            first = places[0].topleft if isinstance(places[0], pg.Rect) else places[0]
+            x, y = to_screen(first)
+            limit = "" if self.max_alive is None else f"/{self.max_alive}"
+            draw_text(screen, f"next {self.time_left() / 1000:.1f}s  alive {len(self)}{limit}",
+                      x + 14, y + 10, fg=(255, 255, 0), font_size=18)
+
+
+class Waves:
+    """
+    Runs a Spawner in waves: wave 1, a short break, wave 2...
+    A wave ends when all of it has been spawned AND killed.
+
+        spawner = Spawner(make_slime, points=corners, every=1000)
+        waves = Waves(spawner, [5, 8, 12], break_ms=3000, on_all_done=you_win)
+
+        waves.update(tick)                    # instead of spawner.update(tick)
+        wave_label.config(text=waves.text())  # "Wave 2 of 3 - 4 left"
+
+    Each wave can be a number (how many) or a dict of Spawner settings
+    for just that wave. Settings you leave out use the Spawner's own:
+
+        Waves(spawner, [
+            {"count": 5, "every": 1200},
+            {"count": 10, "every": 600, "make": make_bat},
+            {"count": 1, "make": make_boss},
+        ])
+
+    Parameters:
+        spawner        - the Spawner to use
+        waves          - the list of waves (see above)
+        break_ms       - rest between waves, in ms
+        first_break_ms - rest before wave 1 (None = the same as break_ms)
+        on_wave_start, on_wave_end, on_all_done - functions to run (no
+                         arguments; read waves.wave inside them)
+        loop           - True = after the last wave start again (endless mode,
+                         the wave number keeps going up)
+        start          - False = wait until waves.start()
+
+    waves.state is "waiting" (before start), "break", "spawning",
+    "clearing" (all spawned, some still alive) or "done".
+    """
+
+    _wave_settings = ("make", "points", "every", "max_alive", "first_after", "pick",
+                      "avoid", "min_distance")
+
+    def __init__(self, spawner, waves, break_ms=3000, first_break_ms=None,
+                 on_wave_start=None, on_wave_end=None, on_all_done=None,
+                 loop=False, start=True):
+        self.spawner = spawner
+        self.waves = list(waves)
+        self.break_ms = break_ms
+        self.first_break_ms = break_ms if first_break_ms is None else first_break_ms
+        self.on_wave_start = on_wave_start
+        self.on_wave_end = on_wave_end
+        self.on_all_done = on_all_done
+        self.loop = loop
+        self.wave = 0                    # the wave number (0 = not started yet)
+        self.state = "waiting"
+        self._break_left = 0
+        # Remember the Spawner's own settings, to go back to between waves
+        self._base = {name: spawner.cget(name) for name in self._wave_settings}
+        spawner.stop()                   # Waves decides when it spawns
+        if not self.waves:
+            _warn_once("Waves was given an empty list of waves")
+        if start:
+            self.start()
+
+    @property
+    def wave_count(self):
+        """How many waves are in the list."""
+        return len(self.waves)
+
+    def start(self):
+        """Start the first break (or carry on after stop())."""
+        if self.state == "waiting":
+            self.state = "break"
+            self._break_left = self.first_break_ms
+        elif self.state == "stopped":
+            self.state = self._was
+            if self.state == "spawning":
+                self.spawner.start()
+
+    def stop(self):
+        """Pause the waves (alive objects stay)."""
+        if self.state in ("break", "spawning", "clearing"):
+            self._was = self.state
+            self.state = "stopped"
+            self.spawner.stop()
+
+    def restart(self):
+        """Back to before wave 1 (kills everything the spawner made)."""
+        self.spawner.clear()
+        self.spawner.stop()
+        self.wave = 0
+        self.state = "waiting"
+        self.start()
+
+    def skip_break(self):
+        """Start the next wave now."""
+        if self.state == "break":
+            self._break_left = 0
+
+    def break_left(self):
+        """ms until the next wave starts (0 if not in a break)."""
+        return max(0, self._break_left) if self.state == "break" else 0
+
+    def _settings(self, number):
+        """The settings for wave `number` (1, 2, 3...)."""
+        item = self.waves[(number - 1) % len(self.waves)]
+        if isinstance(item, dict):
+            return dict(item)
+        return {"count": item}
+
+    def _start_wave(self):
+        self.wave += 1
+        settings = self._settings(self.wave)
+        count = settings.pop("count", 1)
+        self.spawner.config(**self._base)      # back to the Spawner's own settings
+        self.spawner.config(**settings)        # then this wave's changes
+        self.spawner.total = count
+        self.spawner.reset()
+        if self.spawner.first_after is None:
+            self.spawner._wait = 0             # the break was the wait: start now
+        self.spawner.start()
+        self.state = "spawning"
+        if self.on_wave_start:
+            self.on_wave_start()
+
+    def _end_wave(self):
+        self.spawner.stop()
+        if self.on_wave_end:
+            self.on_wave_end()
+        if self.wave >= len(self.waves) and not self.loop:
+            self.state = "done"
+            if self.on_all_done:
+                self.on_all_done()
+        else:
+            self.state = "break"
+            self._break_left = self.break_ms
+
+    def left(self):
+        """How many in this wave are still to come or still alive."""
+        if self.state not in ("spawning", "clearing", "stopped"):
+            return 0
+        to_come = max(0, (self.spawner.total or 0) - self.spawner.spawned)
+        return to_come + len(self.spawner)
+
+    @property
+    def finished(self):
+        return self.state == "done"
+
+    def update(self, tick):
+        """Runs the breaks and the waves (and updates the Spawner). Once per frame."""
+        if not self.waves:
+            return
+        if self.state == "break":
+            self._break_left -= tick
+            if self._break_left <= 0:
+                self._start_wave()
+        self.spawner.update(tick)
+        if self.state == "spawning" and self.spawner.done_spawning:
+            self.state = "clearing"
+        if self.state == "clearing" and len(self.spawner) == 0:
+            self._end_wave()
+
+    def text(self):
+        """Words for a Label, e.g. "Wave 2 of 3 - 4 left" or "Wave 3 in 2"."""
+        if self.state == "waiting":
+            return "Get ready"
+        if self.state == "done":
+            return "All waves done!"
+        if self.state == "break" or (self.state == "stopped" and self._was == "break"):
+            seconds = int(-(-self._break_left // 1000))      # round up
+            return f"Wave {self.wave + 1} in {max(0, seconds)}"
+        of = "" if self.loop else f" of {len(self.waves)}"
+        return f"Wave {self.wave}{of} - {self.left()} left"
+
+
+# ================================
+# Chain Class (snakes, followers, trains, worms, trails)
+# ================================
+
+class ChainSegment:
+    """One link of a Chain that the Chain draws itself (has a .rect for collisions)."""
+
+    def __init__(self, size):
+        self.rect = pg.Rect(0, 0, size[0], size[1])
+        self.angle = 0
+        self.visible = True
+
+
+class Chain:
+    """
+    A line of things that follow a leader along the path it took.
+
+    "path" mode (anything that moves freely):
+        worm = Chain(head, count=12, spacing=14, size=16, color=(200, 120, 80), shrink=True)
+        party = Chain(hero, segments=[elf, dwarf], spacing=40)     # real sprites follow
+        train = Chain(engine, segments=[carriage1, carriage2], spacing=60, rotate=True)
+        trail = Chain(rocket, count=8, spacing=6, fade=True)       # afterimages
+
+    "grid" mode (Snake):
+        snake = Chain(mode="grid", grid=board, head_cell=(5, 5), length=3,
+                      move_every=120, images="snake_sheet.png")
+        snake.turn("left")      # queued, so quick key presses aren't lost
+        snake.update(tick)      # moves one cell every move_every ms
+        if snake.moved and snake.head_cell == food: snake.grow()
+        if snake.hits_self() or snake.hits_wall(): game_over()
+
+    Parameters (path mode):
+        leader    - the thing to follow (anything with a .rect)
+        segments  - sprites that follow (any objects with .rect), and / or
+        count     - how many simple drawn links to add
+        spacing   - distance between links (pixels)
+        delay_ms  - follow this many ms behind instead of a distance (party members)
+        size      - size of drawn links (number or (w, h))
+        color, image - how drawn links look
+        shrink    - True: drawn links get smaller towards the end
+        fade      - True: drawn links fade towards the end
+        rotate    - True: images turn to face the way they are moving
+
+    Parameters (grid mode):
+        grid, head_cell, length, direction ("right"...), move_every (ms),
+        wrap (True: go off one side and appear on the other),
+        images - a sprite sheet with 4 pieces in a row (head, body, corner, tail),
+                 or a dict {"head": .., "body": .., "corner": .., "tail": ..},
+        color, head_color - colours used when there are no images
+
+    Both modes: attach(thing), detach(thing), grow(n), shrink_by(n), touching(thing),
+    hits_self(), segments, update(tick), draw(screen, camera)
+    """
+
+    DIRECTIONS = {"right": (1, 0), "left": (-1, 0), "up": (0, -1), "down": (0, 1)}
+
+    def __init__(self, leader=None, segments=None, count=0, spacing=20, delay_ms=None,
+                 size=16, color=(120, 200, 90), colour=None, image=None, shrink=False,
+                 fade=False, rotate=True, mode="path", grid=None, head_cell=(0, 0),
+                 length=3, direction="right", move_every=150, wrap=False, images=None,
+                 head_color=None):
+        self.mode = mode
+        self.leader = leader
+        self.spacing = spacing
+        self.delay_ms = delay_ms
+        self.size = (size, size) if isinstance(size, (int, float)) else tuple(size)
+        self.color = _pick(colour, color)
+        self.image = image
+        self.shrink = shrink
+        self.fade = fade
+        self.rotate = rotate
+        self.segments = []
+        self.visible = True
+
+        if mode == "grid":
+            if grid is None:
+                raise ValueError('Chain(mode="grid") needs grid= (a Grid)')
+            self.grid = grid
+            self.direction = self.DIRECTIONS[direction]
+            self.cells = [(head_cell[0] - i * self.direction[0], head_cell[1] - i * self.direction[1])
+                          for i in range(length)]
+            self.move_every = move_every
+            self.wrap = wrap
+            self.head_color = head_color or tuple(max(0, c - 40) for c in self.color)
+            self._queue = []
+            self._timer = 0
+            self._growing = 0
+            self._out_of_grid = False
+            self.moved = False
+            self.pieces = self._load_pieces(images)
+            return
+
+        if leader is None:
+            raise ValueError("Chain needs a leader to follow (or mode='grid')")
+        # Path history: newest first
+        start = pg.Vector2(leader.rect.center)
+        self._history = [start + pg.Vector2(-i * 2, 0) for i in range(400)]
+        self._timed = [(pg.time.get_ticks(), pg.Vector2(start))]
+        for thing in segments or []:
+            self.attach(thing)
+        self.grow(count)
+
+    # ================= adding and removing =================
+    def attach(self, thing):
+        """Add something to the end of the chain (a sprite, or anything with .rect)."""
+        if self.mode == "grid":
+            self.grow(1)
+            return
+        self.segments.append(thing)
+        if hasattr(thing, "image"):
+            thing._chain_picture = thing.image
+        self._place(0)
+
+    def detach(self, thing):
+        """Take something out of the chain (the rest close up the gap)."""
+        if thing in self.segments:
+            self.segments.remove(thing)
+            if hasattr(thing, "_chain_picture"):
+                thing.image = thing._chain_picture
+
+    def grow(self, count=1):
+        """Add links: drawn links in path mode, cells in grid mode."""
+        if self.mode == "grid":
+            self._growing += count
+            return
+        for _ in range(int(count)):
+            self.segments.append(ChainSegment(self.size))
+        self._place(0)
+
+    def shrink_by(self, count=1):
+        """Remove links from the end."""
+        for _ in range(int(count)):
+            if self.mode == "grid":
+                if len(self.cells) > 1:
+                    self.cells.pop()
+            elif self.segments:
+                self.detach(self.segments[-1])
+
+    def __len__(self):
+        return len(self.cells) if self.mode == "grid" else len(self.segments)
+
+    # ================= path mode =================
+    def _point_back(self, distance):
+        """The point `distance` pixels back along the leader's path."""
+        walked = 0
+        for a, b in zip(self._history, self._history[1:]):
+            step = a.distance_to(b)
+            if walked + step >= distance:
+                if step == 0:
+                    return pg.Vector2(a), pg.Vector2(1, 0)
+                f = (distance - walked) / step
+                return a.lerp(b, f), (a - b)
+            walked += step
+        last = self._history[-1]
+        return pg.Vector2(last), pg.Vector2(1, 0)
+
+    def _place(self, tick):
+        import math
+        now = pg.time.get_ticks()
+        for i, seg in enumerate(self.segments):
+            if self.delay_ms is not None:
+                target_time = now - (i + 1) * self.delay_ms
+                pos, facing = self._timed[-1][1], pg.Vector2(1, 0)
+                for (t1, p1), (t0, p0) in zip(self._timed, self._timed[1:]):
+                    if t0 <= target_time:
+                        pos, facing = p0, (p1 - p0) if p1 != p0 else pg.Vector2(1, 0)
+                        break
+            else:
+                pos, facing = self._point_back((i + 1) * self.spacing)
+            seg.rect.center = (round(pos.x), round(pos.y))
+            angle = -math.degrees(math.atan2(facing.y, facing.x)) if facing.length() else 0
+            if not isinstance(seg, SpriteObject):
+                # A SpriteObject's angle turns its picture, so leave it alone
+                # (rotate=True below turns it the v1.0 way)
+                seg.angle = angle
+            if self.rotate and hasattr(seg, "_chain_picture") and seg._chain_picture is not None:
+                seg.image = pg.transform.rotate(seg._chain_picture, round(angle / 10) * 10)
+                seg.rect = seg.image.get_rect(center=seg.rect.center)
+
+    def _record_leader(self):
+        here = pg.Vector2(self.leader.rect.center)
+        if here.distance_to(self._history[0]) >= 1:
+            self._history.insert(0, here)
+            # keep only as much path as the chain needs
+            needed = (len(self.segments) + 2) * self.spacing
+            walked, keep = 0, 2
+            for a, b in zip(self._history, self._history[1:]):
+                walked += a.distance_to(b)
+                keep += 1
+                if walked > needed:
+                    break
+            del self._history[max(keep, 2):]
+        if self.delay_ms is not None:
+            now = pg.time.get_ticks()
+            self._timed.insert(0, (now, here))
+            limit = now - (len(self.segments) + 2) * self.delay_ms
+            while len(self._timed) > 2 and self._timed[-1][0] < limit:
+                self._timed.pop()
+
+    # ================= grid mode =================
+    def _load_pieces(self, images):
+        if images is None:
+            return None
+        if isinstance(images, dict):
+            return {k: load_image(v, (self.grid.cell_w, self.grid.cell_h)) for k, v in images.items()}
+        sheet = load_image(images)
+        w = sheet.get_width() // 4
+        pieces = {}
+        for i, name in enumerate(["head", "body", "corner", "tail"]):
+            piece = sheet.subsurface(pg.Rect(i * w, 0, w, sheet.get_height())).copy()
+            pieces[name] = pg.transform.scale(piece, (self.grid.cell_w, self.grid.cell_h))
+        return pieces
+
+    @property
+    def head_cell(self):
+        return self.cells[0]
+
+    def turn(self, direction):
+        """Change direction ("up", "down", "left", "right"). Quick presses are queued."""
+        new = self.DIRECTIONS[direction] if isinstance(direction, str) else tuple(direction)
+        last = self._queue[-1] if self._queue else self.direction
+        if new == last or (new[0] == -last[0] and new[1] == -last[1]):
+            return                             # same way, or straight back into itself
+        if len(self._queue) < 3:
+            self._queue.append(new)
+
+    def step(self):
+        """Move one cell now."""
+        if self._queue:
+            self.direction = self._queue.pop(0)
+        x, y = self.cells[0]
+        x, y = x + self.direction[0], y + self.direction[1]
+        self._out_of_grid = not (0 <= x < self.grid.cols and 0 <= y < self.grid.rows)
+        if self.wrap:
+            x, y = x % self.grid.cols, y % self.grid.rows
+            self._out_of_grid = False
+        self.cells.insert(0, (x, y))
+        if self._growing > 0:
+            self._growing -= 1
+        else:
+            self.cells.pop()
+        self.moved = True
+
+    def hits_wall(self):
+        """True if the head went off the grid (when wrap is False)."""
+        return self.mode == "grid" and self._out_of_grid
+
+    def occupies(self, cell):
+        return tuple(cell) in self.cells
+
+    def free_cells(self):
+        """Every grid cell the chain isn't in (e.g. to place food)."""
+        taken = set(self.cells)
+        return [c for c in self.grid.all_cells() if c not in taken]
+
+    def _cell_rect(self, cell):
+        return self.grid.cell_rect(*cell)
+
+    # ================= both modes =================
+    def hits_self(self):
+        """True if the head runs into the chain."""
+        if self.mode == "grid":
+            return self.cells[0] in self.cells[1:]
+        head = self.leader.rect
+        return any(head.colliderect(s.rect) for s in self.segments[2:])
+
+    def touching(self, thing):
+        """The first link touching thing (or None)."""
+        r = _rect_of(thing)
+        if self.mode == "grid":
+            for cell in self.cells:
+                if self._cell_rect(cell).colliderect(r):
+                    return cell
+            return None
+        for seg in self.segments:
+            if seg.rect.colliderect(r):
+                return seg
+        return None
+
+    def rects(self):
+        if self.mode == "grid":
+            return [self._cell_rect(c) for c in self.cells]
+        return [s.rect for s in self.segments]
+
+    def update(self, tick):
+        if self.mode == "grid":
+            self.moved = False
+            self._timer += tick
+            if self._timer >= self.move_every:
+                self._timer -= self.move_every
+                self.step()
+            return
+        # Animated sprites in the chain: animate first, then turn the new picture
+        for seg in self.segments:
+            if not isinstance(seg, ChainSegment) and getattr(seg, "animator", None) is not None:
+                seg.update(tick)
+                seg._chain_picture = seg.image
+        self._record_leader()
+        self._place(tick)
+
+    # ================= drawing =================
+    @staticmethod
+    def _direction_between(a, b, cols, rows):
+        """Direction from cell a to its neighbour b (works across wrap edges)."""
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        if abs(dx) > 1:
+            dx = -1 if dx > 0 else 1
+        if abs(dy) > 1:
+            dy = -1 if dy > 0 else 1
+        return dx, dy
+
+    def _draw_grid(self, screen, camera):
+        names = {(1, 0): "E", (-1, 0): "W", (0, -1): "N", (0, 1): "S"}
+        head_angle = {"E": 0, "N": 90, "W": 180, "S": 270}
+        corner_angle = {frozenset("WS"): 0, frozenset("SE"): 90, frozenset("EN"): 180,
+                        frozenset("NW"): 270}
+        cols, rows = self.grid.cols, self.grid.rows
+        n = len(self.cells)
+        for i in range(n - 1, -1, -1):
+            cell = self.cells[i]
+            r = self._cell_rect(cell)
+            if camera is not None:
+                r = camera.apply(r)
+            if self.pieces is None:
+                colour = self.head_color if i == 0 else self.color
+                pg.draw.rect(screen, colour, r.inflate(-2, -2), border_radius=6)
+                if i == 0:                                   # eyes
+                    d = pg.Vector2(self.direction)
+                    side = pg.Vector2(-d.y, d.x)
+                    for s in (-1, 1):
+                        eye = pg.Vector2(r.center) + d * r.width * 0.2 + side * s * r.width * 0.2
+                        pg.draw.circle(screen, WHITE, eye, max(2, r.width // 8))
+                continue
+            if i == 0:
+                towards = names.get(self.direction, "E")
+                piece = pg.transform.rotate(self.pieces["head"], head_angle[towards])
+            elif i == n - 1:
+                towards = names.get(self._direction_between(cell, self.cells[i - 1], cols, rows), "E")
+                piece = pg.transform.rotate(self.pieces["tail"], head_angle[towards])
+            else:
+                a = names.get(self._direction_between(cell, self.cells[i - 1], cols, rows), "E")
+                b = names.get(self._direction_between(cell, self.cells[i + 1], cols, rows), "W")
+                if {a, b} in ({"E", "W"}, {"N", "S"}):
+                    piece = self.pieces["body"] if a in "EW" else \
+                        pg.transform.rotate(self.pieces["body"], 90)
+                else:
+                    piece = pg.transform.rotate(self.pieces["corner"],
+                                                corner_angle.get(frozenset(a + b), 0))
+            screen.blit(piece, r)
+
+    def draw(self, screen, camera=None):
+        """Draw the chain (from the end to the front, so the front is on top)."""
+        if not self.visible:
+            return
+        if self.mode == "grid":
+            self._draw_grid(screen, camera)
+            if Debug.on:
+                for cell in self.cells:
+                    r = self._cell_rect(cell)
+                    pg.draw.rect(screen, (0, 255, 0), camera.apply(r) if camera else r, 1)
+            return
+        total = max(1, len(self.segments))
+        for i in range(len(self.segments) - 1, -1, -1):
+            seg = self.segments[i]
+            if not isinstance(seg, ChainSegment):
+                if hasattr(seg, "draw"):
+                    seg.draw(screen, camera) if camera is not None else seg.draw(screen)
+                continue
+            t = i / total
+            scale = 1 - 0.7 * t if self.shrink else 1
+            w, h = max(1, int(self.size[0] * scale)), max(1, int(self.size[1] * scale))
+            alpha = int(255 * (1 - t)) if self.fade else 255
+            centre = seg.rect.center
+            if camera is not None:
+                centre = camera.apply_pos(centre)
+            if self.image is not None:
+                picture = load_image(self.image, (w, h))
+                if self.rotate:
+                    picture = pg.transform.rotate(picture, round(seg.angle / 10) * 10)
+                if alpha < 255:
+                    picture = picture.copy()
+                    picture.set_alpha(alpha)
+                screen.blit(picture, picture.get_rect(center=centre))
+            else:
+                picture = pg.Surface((w, h), pg.SRCALPHA)
+                pg.draw.ellipse(picture, tuple(self.color[:3]) + (alpha,), picture.get_rect())
+                if self.rotate and w != h:
+                    picture = pg.transform.rotate(picture, round(seg.angle / 10) * 10)
+                screen.blit(picture, picture.get_rect(center=centre))
+            middle = seg.rect.center
+            seg.rect.size = (w, h)              # collisions match the drawn size
+            seg.rect.center = middle
+        if Debug.on:
+            for seg in self.segments:
+                r = camera.apply(seg.rect) if camera else seg.rect
+                pg.draw.rect(screen, (0, 255, 0), r, 1)
