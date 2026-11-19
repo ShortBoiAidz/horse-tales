@@ -3,8 +3,8 @@
 #* Please refer to './rulesForDevs.py' for information on how to structure documents.
 
 
-from .data.states import mapstates, soundstates
-from .data.components import characters, maps
+from data.states import mapstates, soundstates
+from data.components import characters, maps
 import JustEnoughAssets as JEA
 
 import pygame as pg
